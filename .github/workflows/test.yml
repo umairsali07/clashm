@@ -1,0 +1,26 @@
+name: Test
+on: [push]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          check-latest: true
+          go-version: '1.19'
+
+      - name: TestWireGuard
+        if: contains(github.event.head_commit.message, 'test')
+        run: |
+          cd test/
+          go mod tidy
+          go test -run=TestWireGuard -v
+
+      - name: TestAll
+        if: contains(github.event.head_commit.message, 'test')
+        run: |
+          cd test/
+          make test
