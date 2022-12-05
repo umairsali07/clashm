@@ -341,12 +341,15 @@ func proxiesParseAndFilter(filter string, filterReg *regexp.Regexp, forceCertVer
 		if err := yaml.Unmarshal(buf, schema); err != nil {
 			proxies, err1 := convert.ConvertsV2Ray(buf)
 			if err1 != nil {
-				return nil, fmt.Errorf("%w, %s", err, err1.Error())
+				proxies, err1 = convert.ConvertsWireGuard(buf)
+			}
+			if err1 != nil {
+				return nil, errors.New("parse config file failure")
 			}
 			schema.Proxies = proxies
 		}
 
-		if schema.Proxies == nil {
+		if len(schema.Proxies) == 0 {
 			return nil, errors.New("file must have a `proxies` field")
 		}
 

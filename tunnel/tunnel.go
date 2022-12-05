@@ -96,16 +96,46 @@ func Providers() map[string]provider.ProxyProvider {
 	return providers
 }
 
+func FindProxyByName(name string) (proxy C.Proxy, found bool) {
+	proxy, found = proxies[name]
+	if found {
+		return
+	}
+	pds := providers
+	for _, pd := range pds {
+		if pd.VehicleType() == provider.Compatible {
+			continue
+		}
+		for _, p := range pd.Proxies() {
+			found = p.Name() == name
+			if found {
+				proxy = p
+				return
+			}
+		}
+	}
+	return
+}
+
 // UpdateProxies handle update proxies
 func UpdateProxies(newProxies map[string]C.Proxy, newProviders map[string]provider.ProxyProvider) {
 	configMux.Lock()
 	old := proxies
+	oldPDs := providers
 	proxies = newProxies
 	providers = newProviders
 	C.GetScriptProxyProviders = scriptProxyProvidersGetter
 	statistic.DefaultManager.Cleanup()
 	for _, p := range old {
 		go p.(C.ProxyAdapter).Cleanup()
+	}
+	for _, pd := range oldPDs {
+		if pd.VehicleType() == provider.Compatible {
+			continue
+		}
+		for _, p := range pd.Proxies() {
+			go p.(C.ProxyAdapter).Cleanup()
+		}
 	}
 	configMux.Unlock()
 }
@@ -222,7 +252,7 @@ func resolveMetadata(_ C.PlainContext, metadata *C.Metadata) (proxy C.Proxy, rul
 
 	if metadata.SpecialProxy != "" {
 		var exist bool
-		proxy, exist = proxies[metadata.SpecialProxy]
+		proxy, exist = FindProxyByName(metadata.SpecialProxy)
 		if !exist {
 			err = fmt.Errorf("proxy %s not found", metadata.SpecialProxy)
 		}
@@ -313,7 +343,8 @@ func handleUDPConn(packet *inbound.PacketAdapter) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), C.DefaultUDPTimeout)
 		defer cancel()
-		rawPc, err := proxy.ListenPacketContext(ctx, metadata.Pure(false))
+		metadataPure := metadata.Pure(false)
+		rawPc, err := proxy.ListenPacketContext(ctx, metadataPure)
 		if err != nil {
 			if rule == nil {
 				log.Warn().
@@ -332,6 +363,11 @@ func handleUDPConn(packet *inbound.PacketAdapter) {
 			}
 			return
 		}
+
+		if metadataPure.TempDstIP.IsValid() {
+			metadata.DstIP = metadataPure.TempDstIP
+		}
+
 		pCtx.InjectPacketConn(rawPc)
 		pc := statistic.NewUDPTracker(rawPc, statistic.DefaultManager, metadata, rule)
 
@@ -540,8 +576,10 @@ func matchScript(metadata *C.Metadata) (C.Proxy, error) {
 		return nil, err
 	}
 
-	if _, ok := proxies[adapter]; !ok {
+	if proxy, ok := proxies[adapter]; !ok {
 		return nil, fmt.Errorf("proxy adapter [%s] not found by script", adapter)
+	} else if metadata.NetWork == C.UDP && !proxy.SupportUDP() {
+		return nil, fmt.Errorf("proxy adapter [%s] UDP is not supported", adapter)
 	}
 
 	return proxies[adapter], nil
