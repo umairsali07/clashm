@@ -51,10 +51,6 @@ type VmessOption struct {
 	GrpcOpts       GrpcOptions  `proxy:"grpc-opts,omitempty"`
 	WSOpts         WSOptions    `proxy:"ws-opts,omitempty"`
 	RandomHost     bool         `proxy:"rand-host,omitempty"`
-
-	// TODO: compatible with VMESS WS older version configurations
-	WSHeaders map[string]string `proxy:"ws-headers,omitempty"`
-	WSPath    string            `proxy:"ws-path,omitempty"`
 }
 
 type HTTPOptions struct {
@@ -84,13 +80,6 @@ func (v *Vmess) StreamConn(c net.Conn, metadata *C.Metadata) (net.Conn, error) {
 	var err error
 	switch v.option.Network {
 	case "ws":
-		if v.option.WSOpts.Path == "" {
-			v.option.WSOpts.Path = v.option.WSPath
-		}
-		if len(v.option.WSOpts.Headers) == 0 {
-			v.option.WSOpts.Headers = v.option.WSHeaders
-		}
-
 		host, port, _ := net.SplitHostPort(v.addr)
 		wsOpts := &vmess.WebsocketConfig{
 			Host:                host,
@@ -125,9 +114,9 @@ func (v *Vmess) StreamConn(c net.Conn, metadata *C.Metadata) (net.Conn, error) {
 		}
 		c, err = vmess.StreamWebsocketConn(c, wsOpts)
 	case "http":
+		host, _, _ := net.SplitHostPort(v.addr)
 		// readability first, so just copy default TLS logic
 		if v.option.TLS {
-			host, _, _ := net.SplitHostPort(v.addr)
 			tlsOpts := &vmess.TLSConfig{
 				Host:           host,
 				SkipCertVerify: v.option.SkipCertVerify,
@@ -141,17 +130,24 @@ func (v *Vmess) StreamConn(c net.Conn, metadata *C.Metadata) (net.Conn, error) {
 			if err != nil {
 				return nil, err
 			}
-		} else if v.option.RandomHost || len(v.option.HTTPOpts.Headers["Host"]) == 0 {
-			v.option.HTTPOpts.Headers["Host"] = []string{convert.RandHost()}
-			v.option.HTTPOpts.Headers["User-Agent"] = []string{convert.RandUserAgent()}
 		}
 
-		host, _, _ := net.SplitHostPort(v.addr)
 		httpOpts := &vmess.HTTPConfig{
 			Host:    host,
 			Method:  v.option.HTTPOpts.Method,
 			Path:    v.option.HTTPOpts.Path,
-			Headers: v.option.HTTPOpts.Headers,
+			Headers: make(map[string][]string),
+		}
+
+		if len(v.option.HTTPOpts.Headers) != 0 {
+			for key, value := range v.option.HTTPOpts.Headers {
+				httpOpts.Headers[key] = value
+			}
+		}
+
+		if !v.option.TLS && (v.option.RandomHost || len(v.option.HTTPOpts.Headers["Host"]) == 0) {
+			httpOpts.Headers["Host"] = []string{convert.RandHost()}
+			httpOpts.Headers["User-Agent"] = []string{convert.RandUserAgent()}
 		}
 
 		c = vmess.StreamHTTPConn(c, httpOpts)
@@ -208,7 +204,7 @@ func (v *Vmess) StreamConn(c net.Conn, metadata *C.Metadata) (net.Conn, error) {
 func (v *Vmess) StreamPacketConn(c net.Conn, metadata *C.Metadata) (net.Conn, error) {
 	// vmess use stream-oriented udp with a special address, so we need a net.UDPAddr
 	if !metadata.Resolved() {
-		ip, err := resolver.ResolveFirstIP(metadata.Host)
+		ip, err := resolver.LookupFirstIP(context.Background(), metadata.Host)
 		if err != nil {
 			return c, fmt.Errorf("can't resolve ip: %w", err)
 		}
@@ -218,7 +214,7 @@ func (v *Vmess) StreamPacketConn(c net.Conn, metadata *C.Metadata) (net.Conn, er
 	var err error
 	c, err = v.StreamConn(c, metadata)
 	if err != nil {
-		return c, fmt.Errorf("new vmess client error: %v", err)
+		return c, fmt.Errorf("new vmess client error: %w", err)
 	}
 
 	return WrapConn(&vmessPacketConn{Conn: c, rAddr: metadata.UDPAddr()}), nil
@@ -232,7 +228,9 @@ func (v *Vmess) DialContext(ctx context.Context, metadata *C.Metadata, opts ...d
 		if err != nil {
 			return nil, err
 		}
-		defer safeConnClose(c, err)
+		defer func(cc net.Conn, e error) {
+			safeConnClose(cc, e)
+		}(c, err)
 
 		c, err = v.client.StreamConn(c, parseVmessAddr(metadata))
 		if err != nil {
@@ -244,10 +242,12 @@ func (v *Vmess) DialContext(ctx context.Context, metadata *C.Metadata, opts ...d
 
 	c, err := dialer.DialContext(ctx, "tcp", v.addr, v.Base.DialOptions(opts...)...)
 	if err != nil {
-		return nil, fmt.Errorf("%s connect error: %s", v.addr, err.Error())
+		return nil, fmt.Errorf("%s connect error: %w", v.addr, err)
 	}
 	tcpKeepAlive(c)
-	defer safeConnClose(c, err)
+	defer func(cc net.Conn, e error) {
+		safeConnClose(cc, e)
+	}(c, err)
 
 	c, err = v.StreamConn(c, metadata)
 	return NewConn(c, v), err
@@ -260,7 +260,7 @@ func (v *Vmess) ListenPacketContext(ctx context.Context, metadata *C.Metadata, o
 	if v.transport != nil && len(opts) == 0 {
 		// vmess use stream-oriented udp with a special address, so we need a net.UDPAddr
 		if !metadata.Resolved() {
-			ip, err := resolver.ResolveFirstIP(metadata.Host)
+			ip, err := resolver.LookupFirstIP(ctx, metadata.Host)
 			if err != nil {
 				return nil, fmt.Errorf("can't resolve ip: %w", err)
 			}
@@ -271,11 +271,13 @@ func (v *Vmess) ListenPacketContext(ctx context.Context, metadata *C.Metadata, o
 		if err != nil {
 			return nil, err
 		}
-		defer safeConnClose(c, err)
+		defer func(cc net.Conn, e error) {
+			safeConnClose(cc, e)
+		}(c, err)
 
 		c, err = v.client.StreamConn(c, parseVmessAddr(metadata))
 		if err != nil {
-			return nil, fmt.Errorf("new vmess client error: %v", err)
+			return nil, fmt.Errorf("new vmess client error: %w", err)
 		}
 
 		return NewPacketConn(&vmessPacketConn{Conn: c, rAddr: metadata.UDPAddr()}, v), nil
@@ -283,15 +285,17 @@ func (v *Vmess) ListenPacketContext(ctx context.Context, metadata *C.Metadata, o
 
 	c, err = dialer.DialContext(ctx, "tcp", v.addr, v.Base.DialOptions(opts...)...)
 	if err != nil {
-		return nil, fmt.Errorf("%s connect error: %s", v.addr, err.Error())
+		return nil, fmt.Errorf("%s connect error: %w", v.addr, err)
 	}
 
 	tcpKeepAlive(c)
-	defer safeConnClose(c, err)
+	defer func(cc net.Conn, e error) {
+		safeConnClose(cc, e)
+	}(c, err)
 
 	c, err = v.StreamPacketConn(c, metadata)
 	if err != nil {
-		return nil, fmt.Errorf("new vmess client error: %v", err)
+		return nil, fmt.Errorf("new vmess client error: %w", err)
 	}
 
 	return NewPacketConn(c.(net.PacketConn), v), nil
@@ -340,7 +344,7 @@ func NewVmess(option VmessOption) (*Vmess, error) {
 		dialFn := func(network, addr string) (net.Conn, error) {
 			c, err := dialer.DialContext(context.Background(), "tcp", v.addr, v.Base.DialOptions()...)
 			if err != nil {
-				return nil, fmt.Errorf("%s connect error: %s", v.addr, err.Error())
+				return nil, fmt.Errorf("%s connect error: %w", v.addr, err)
 			}
 			tcpKeepAlive(c)
 			return c, nil

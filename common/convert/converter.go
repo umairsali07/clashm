@@ -16,8 +16,9 @@ import (
 var enc = base64.StdEncoding
 
 func DecodeBase64(buf []byte) ([]byte, error) {
-	dBuf := make([]byte, enc.DecodedLen(len(buf)))
-	n, err := enc.Decode(dBuf, buf)
+	buff := bytes.TrimSpace(buf)
+	dBuf := make([]byte, enc.DecodedLen(len(buff)))
+	n, err := enc.Decode(dBuf, buff)
 	if err != nil {
 		return nil, err
 	}
@@ -26,8 +27,9 @@ func DecodeBase64(buf []byte) ([]byte, error) {
 }
 
 func DecodeRawBase64(buf []byte) ([]byte, error) {
-	dBuf := make([]byte, base64.RawStdEncoding.DecodedLen(len(buf)))
-	n, err := base64.RawStdEncoding.Decode(dBuf, buf)
+	buff := bytes.TrimSpace(buf)
+	dBuf := make([]byte, base64.RawStdEncoding.DecodedLen(len(buff)))
+	n, err := base64.RawStdEncoding.Decode(dBuf, buff)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +98,6 @@ func ConvertsV2Ray(buf []byte) ([]map[string]any, error) {
 				headers := make(map[string]any)
 				wsOpts := make(map[string]any)
 
-				headers["Host"] = RandHost()
 				headers["User-Agent"] = RandUserAgent()
 
 				wsOpts["path"] = query.Get("path")
@@ -119,7 +120,12 @@ func ConvertsV2Ray(buf []byte) ([]map[string]any, error) {
 				continue
 			}
 
-			name := uniqueName(names, values["ps"].(string))
+			name, ok := values["ps"].(string)
+			if !ok {
+				continue
+			}
+
+			name = uniqueName(names, name)
 			vmess := make(map[string]any, 20)
 
 			vmess["name"] = name
@@ -132,24 +138,43 @@ func ConvertsV2Ray(buf []byte) ([]map[string]any, error) {
 			vmess["udp"] = true
 			vmess["skip-cert-verify"] = false
 
-			host := values["host"]
-			network := strings.ToLower(values["net"].(string))
-
+			var (
+				sni     = values["sni"]
+				host    = values["host"]
+				network = "tcp"
+			)
+			if n, ok := values["net"].(string); ok {
+				network = strings.ToLower(n)
+			}
 			vmess["network"] = network
 
-			tls := strings.ToLower(values["tls"].(string))
+			var (
+				tls   = ""
+				isTls = false
+			)
+			if t, ok := values["tls"].(string); ok {
+				tls = strings.ToLower(t)
+			}
 			if tls != "" && tls != "0" && tls != "null" {
-				if host != nil {
-					vmess["servername"] = host
+				if sni != nil {
+					vmess["servername"] = sni
 				}
 				vmess["tls"] = true
+				isTls = true
 			}
 
 			if network == "ws" {
 				headers := make(map[string]any)
 				wsOpts := make(map[string]any)
 
-				headers["Host"] = RandHost()
+				if !isTls {
+					if _, ok = host.(string); ok {
+						headers["Host"] = host
+					} else {
+						headers["Host"] = RandHost()
+					}
+				}
+
 				headers["User-Agent"] = RandUserAgent()
 
 				if values["path"] != nil {
@@ -158,6 +183,27 @@ func ConvertsV2Ray(buf []byte) ([]map[string]any, error) {
 				wsOpts["headers"] = headers
 
 				vmess["ws-opts"] = wsOpts
+			} else if network == "http" {
+				headers := make(map[string][]string)
+				httpOpts := make(map[string]any)
+
+				if !isTls {
+					if h, ok := host.(string); ok {
+						headers["Host"] = []string{h}
+					} else {
+						headers["Host"] = []string{RandHost()}
+					}
+				}
+
+				headers["User-Agent"] = []string{RandUserAgent()}
+
+				if values["path"] != nil {
+					httpOpts["path"] = values["path"]
+				}
+				httpOpts["Host"] = values["add"]
+				httpOpts["headers"] = headers
+
+				vmess["http-opts"] = httpOpts
 			}
 
 			proxies = append(proxies, vmess)
@@ -306,7 +352,6 @@ func ConvertsV2Ray(buf []byte) ([]map[string]any, error) {
 				headers := make(map[string]any)
 				wsOpts := make(map[string]any)
 
-				headers["Host"] = RandHost()
 				headers["User-Agent"] = RandUserAgent()
 
 				wsOpts["path"] = query.Get("path")

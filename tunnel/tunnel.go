@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/phuslu/log"
+	"go.uber.org/atomic"
 
 	A "github.com/Dreamacro/clash/adapter"
 	"github.com/Dreamacro/clash/adapter/inbound"
@@ -58,6 +59,9 @@ var (
 		}
 		return providersMap
 	}
+
+	UDPFallbackMatch  = atomic.NewBool(false)
+	UDPFallbackPolicy = atomic.NewString("")
 )
 
 func init() {
@@ -295,8 +299,9 @@ func handleUDPConn(packet *inbound.PacketAdapter) {
 
 	// local resolve UDP dns
 	if !metadata.Resolved() {
-		ip, err := resolver.ResolveFirstIP(metadata.Host)
+		ip, err := resolver.LookupFirstIP(context.Background(), metadata.Host)
 		if err != nil {
+			log.Warn().Err(err).Msg("[Metadata] lookup IP failed")
 			return
 		}
 		metadata.DstIP = ip
@@ -549,15 +554,34 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 				continue
 			}
 
-			if metadata.NetWork == C.UDP && !adapter.SupportUDP() {
+			if metadata.NetWork == C.UDP && !adapter.SupportUDP() && UDPFallbackMatch.Load() {
 				log.Debug().
 					Str("proxy", adapter.Name()).
-					Msg("[Matcher] UDP is not supported")
+					Msg("[Matcher] UDP is not supported, skip match")
 				continue
+			}
+
+			extra := rule.RuleExtra()
+			if extra != nil {
+				if extra.NotMatchNetwork(metadata.NetWork) {
+					continue
+				}
+
+				if extra.NotMatchSourceIP(metadata.SrcIP) {
+					continue
+				}
+
+				if extra.NotMatchProcessName(metadata.Process) {
+					continue
+				}
 			}
 
 			return adapter, rule, nil
 		}
+	}
+
+	if adapter, ok := proxies[UDPFallbackPolicy.Load()]; ok {
+		return adapter, nil, nil
 	}
 
 	return proxies["REJECT"], nil, nil
@@ -579,7 +603,11 @@ func matchScript(metadata *C.Metadata) (C.Proxy, error) {
 	if proxy, ok := proxies[adapter]; !ok {
 		return nil, fmt.Errorf("proxy adapter [%s] not found by script", adapter)
 	} else if metadata.NetWork == C.UDP && !proxy.SupportUDP() {
-		return nil, fmt.Errorf("proxy adapter [%s] UDP is not supported", adapter)
+		if UDPFallbackMatch.Load() {
+			return nil, fmt.Errorf("proxy adapter [%s] UDP is not supported", adapter)
+		} else if proxy, ok = proxies[UDPFallbackPolicy.Load()]; ok {
+			return proxy, nil
+		}
 	}
 
 	return proxies[adapter], nil
