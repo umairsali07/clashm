@@ -87,7 +87,7 @@ func (hc *HealthCheck) check() {
 		b.Go(p.Name(), func() (bool, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), defaultURLTestTimeout)
 			defer cancel()
-			_, _ = p.URLTest(ctx, hc.url)
+			_, _, _ = p.URLTest(ctx, hc.url)
 			return false, nil
 		})
 	}
@@ -102,7 +102,10 @@ func (hc *HealthCheck) close() {
 		return
 	}
 	hc.running.Store(false)
-	hc.done <- struct{}{}
+	select {
+	case hc.done <- struct{}{}:
+	default:
+	}
 }
 
 func NewHealthCheck(proxies []C.Proxy, url string, interval uint, lazy bool) *HealthCheck {

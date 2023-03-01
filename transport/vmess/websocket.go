@@ -11,13 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/refraction-networking/utls"
 
+	"github.com/Dreamacro/clash/common/errors2"
 	C "github.com/Dreamacro/clash/constant"
 )
 
@@ -82,15 +82,16 @@ func (wsc *websocketConn) Write(b []byte) (int, error) {
 }
 
 func (wsc *websocketConn) Close() error {
-	var mErrors []string
+	var errs error
 	if err := wsc.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second*5)); err != nil {
-		mErrors = append(mErrors, err.Error())
+		errs = errors.Join(errs, err)
 	}
 	if err := wsc.conn.Close(); err != nil {
-		mErrors = append(mErrors, err.Error())
+		errs = errors.Join(errs, err)
 	}
-	if len(mErrors) > 0 {
-		return fmt.Errorf("failed to close connection: %s", strings.Join(mErrors, ","))
+	if errs != nil {
+		errs = errors.Join(errors.New("failed to close connection"), errs)
+		return errors2.Cause(errs)
 	}
 	return nil
 }
@@ -137,17 +138,17 @@ func (wsedc *websocketWithEarlyDataConn) Dial(earlyData []byte) error {
 
 	earlyDataBuf := bytes.NewBuffer(earlyData)
 	if _, err := base64EarlyDataEncoder.Write(earlyDataBuf.Next(wsedc.config.MaxEarlyData)); err != nil {
-		return errors.New("failed to encode early data: " + err.Error())
+		return fmt.Errorf("failed to encode early data: %w", err)
 	}
 
 	if errc := base64EarlyDataEncoder.Close(); errc != nil {
-		return errors.New("failed to encode early data tail: " + errc.Error())
+		return fmt.Errorf("failed to encode early data tail: %w", errc)
 	}
 
 	var err error
 	if wsedc.Conn, err = streamWebsocketConn(wsedc.underlay, wsedc.config, base64DataBuf); err != nil {
 		_ = wsedc.Close()
-		return errors.New("failed to dial WebSocket: " + err.Error())
+		return fmt.Errorf("failed to dial WebSocket: %w", err)
 	}
 
 	wsedc.dialed <- true
@@ -300,11 +301,10 @@ func streamWebsocketConn(conn net.Conn, c *WebsocketConfig, earlyData *bytes.Buf
 
 	wsConn, resp, err := dialer.Dial(uri.String(), headers)
 	if err != nil {
-		reason := err.Error()
 		if resp != nil {
-			reason = resp.Status
+			err = errors.Join(err, errors.New(resp.Status))
 		}
-		return nil, fmt.Errorf("dial %s error: %s", uri.Host, reason)
+		return nil, errors2.Cause(errors.Join(fmt.Errorf("dial %s error", uri.Host), err))
 	}
 
 	return &websocketConn{

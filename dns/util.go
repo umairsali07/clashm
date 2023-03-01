@@ -15,6 +15,7 @@ import (
 
 	"github.com/Dreamacro/clash/adapter"
 	"github.com/Dreamacro/clash/common/cache"
+	"github.com/Dreamacro/clash/common/errors2"
 	"github.com/Dreamacro/clash/common/picker"
 	"github.com/Dreamacro/clash/component/dialer"
 	C "github.com/Dreamacro/clash/constant"
@@ -81,9 +82,6 @@ func transform(servers []NameServer, resolver *Resolver) []dnsClient {
 		switch s.Net {
 		case "https":
 			ret = append(ret, newDoHClient(s.Addr, resolver, s.ProxyAdapter))
-			continue
-		case "quic":
-			ret = append(ret, newDoqClient(s.Addr, resolver, s.ProxyAdapter))
 			continue
 		case "dhcp":
 			ret = append(ret, newDHCPClient(s.Addr))
@@ -255,9 +253,9 @@ func batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *D.M
 	if elm == nil {
 		err = errors.New("all DNS requests failed")
 		if fErr := fast.Error(); fErr != nil {
-			err = fmt.Errorf("%w, first error: %s", err, fErr.Error())
+			err = errors.Join(err, fErr)
 		}
-		return nil, err
+		return nil, errors2.Cause(err)
 	}
 
 	return elm, nil

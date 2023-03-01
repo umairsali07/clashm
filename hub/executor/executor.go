@@ -151,11 +151,6 @@ func updateDNS(c *config.DNS, t *config.Tun) {
 		ProxyServer: c.ProxyServerNameserver,
 	}
 
-	// deprecated warning
-	if cfg.EnhancedMode == C.DNSMapping {
-		log.Warn().Msgf("[DNS] %s is deprecated, please use %s instead", cfg.EnhancedMode.String(), C.DNSFakeIP.String())
-	}
-
 	r := dns.NewResolver(cfg)
 	pr := dns.NewProxyServerHostResolver(r)
 	m := dns.NewEnhancer(cfg)
@@ -256,7 +251,7 @@ func updateGeneral(general *config.General, force bool) {
 	listener.ReCreateHTTP(general.Port, tcpIn)
 	listener.ReCreateSocks(general.SocksPort, tcpIn, udpIn)
 	listener.ReCreateRedir(general.RedirPort, tcpIn, udpIn)
-	listener.ReCreateAutoRedir(general.EBpf.AutoRedir, tcpIn, udpIn)
+	listener.ReCreateAutoRedir(general.EBpf.AutoRedir, general.Interface, tcpIn, udpIn)
 	listener.ReCreateTProxy(general.TProxyPort, tcpIn, udpIn)
 	listener.ReCreateMixed(general.MixedPort, tcpIn, udpIn)
 	listener.ReCreateMitm(general.MitmPort, tcpIn)

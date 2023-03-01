@@ -369,17 +369,7 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 func ParseRawConfig(rawCfg *RawConfig) (config *Config, err error) {
 	defer func() {
 		if err != nil {
-			for _, p := range config.Proxies {
-				go p.(C.ProxyAdapter).Cleanup()
-			}
-			for _, pd := range config.Providers {
-				if pd.VehicleType() == providerTypes.Compatible {
-					continue
-				}
-				for _, p := range pd.Proxies() {
-					go p.(C.ProxyAdapter).Cleanup()
-				}
-			}
+			providerTypes.Cleanup(config.Proxies, config.Providers)
 		}
 		geodata.CleanGeoSiteCache()
 	}()
@@ -683,7 +673,7 @@ func parseRules(cfg *RawConfig, proxies map[string]C.Proxy, matchers map[string]
 
 		parsed, parseErr := R.ParseRule(ruleName, payload, target, params)
 		if parseErr != nil {
-			return nil, nil, fmt.Errorf("rules[%d] [%s] error: %s", idx, line, parseErr.Error())
+			return nil, nil, fmt.Errorf("rules[%d] [%s] error: %w", idx, line, parseErr)
 		}
 
 		if scr, ok := parsed.(*R.Script); ok {
@@ -759,7 +749,7 @@ func parseNameServer(servers []string) ([]dns.NameServer, error) {
 		}
 		u, err := url.Parse(server)
 		if err != nil {
-			return nil, fmt.Errorf("DNS NameServer[%d] format error: %s", idx, err.Error())
+			return nil, fmt.Errorf("DNS NameServer[%d] format error: %w", idx, err)
 		}
 
 		var addr, dnsNetType string
@@ -773,9 +763,6 @@ func parseNameServer(servers []string) ([]dns.NameServer, error) {
 		case "tls":
 			addr, err = hostWithDefaultPort(u.Host, "853")
 			dnsNetType = "tcp-tls" // DNS over TLS
-		case "quic":
-			addr, err = hostWithDefaultPort(u.Host, "853")
-			dnsNetType = "quic" // DNS over QUIC
 		case "https":
 			clearURL := url.URL{Scheme: "https", Host: u.Host, Path: u.Path}
 			addr = clearURL.String()
@@ -788,7 +775,7 @@ func parseNameServer(servers []string) ([]dns.NameServer, error) {
 		}
 
 		if err != nil {
-			return nil, fmt.Errorf("DNS NameServer[%d] format error: %s", idx, err.Error())
+			return nil, fmt.Errorf("DNS NameServer[%d] format error: %w", idx, err)
 		}
 
 		nameservers = append(
@@ -827,7 +814,7 @@ func parseFallbackIPCIDR(ips []string) ([]*netip.Prefix, error) {
 	for idx, ip := range ips {
 		ipnet, err := netip.ParsePrefix(ip)
 		if err != nil {
-			return nil, fmt.Errorf("DNS FallbackIP[%d] format error: %s", idx, err.Error())
+			return nil, fmt.Errorf("DNS FallbackIP[%d] format error: %w", idx, err)
 		}
 		ipNets = append(ipNets, &ipnet)
 	}
