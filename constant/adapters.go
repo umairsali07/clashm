@@ -46,6 +46,7 @@ const (
 type Connection interface {
 	Chains() Chain
 	AppendToChains(adapter ProxyAdapter)
+	SetChains(chains []string)
 	MarshalObject(e *log.Entry)
 }
 
