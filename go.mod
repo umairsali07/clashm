@@ -13,7 +13,7 @@ require (
 	github.com/miekg/dns v1.1.51
 	github.com/oschwald/geoip2-golang v1.8.0
 	github.com/phuslu/log v1.0.83
-	github.com/refraction-networking/utls v1.2.3-0.20230220042438-88b6acde2b28
+	github.com/refraction-networking/utls v1.3.0
 	github.com/samber/lo v1.37.0
 	github.com/stretchr/testify v1.8.2
 	github.com/vishvananda/netlink v1.2.1-beta.2.0.20230206183746-70ca0345eede

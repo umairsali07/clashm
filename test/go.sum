@@ -90,8 +90,8 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
-github.com/refraction-networking/utls v1.2.3-0.20230220042438-88b6acde2b28 h1:Yq8ZoFdbV/7u3RdmO03RTjXYZIVKmsyRyT9e6arWbvI=
-github.com/refraction-networking/utls v1.2.3-0.20230220042438-88b6acde2b28/go.mod h1:kHXvVB66a4BzVRYC4Em7e1HAfp7uwOCCw0+2CZ3sMY8=
+github.com/refraction-networking/utls v1.3.0 h1:ce8s01ETzaohxYIrij8//hlYxuFK9gb9teeC/iOQaT0=
+github.com/refraction-networking/utls v1.3.0/go.mod h1:kHXvVB66a4BzVRYC4Em7e1HAfp7uwOCCw0+2CZ3sMY8=
 github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/samber/lo v1.37.0 h1:XjVcB8g6tgUp8rsPsJ2CvhClfImrpL04YpQHXeHPhRw=
 github.com/samber/lo v1.37.0/go.mod h1:9vaz2O4o8oOnK23pd2TrXufcbdbJIa3b6cstBWKpopA=
