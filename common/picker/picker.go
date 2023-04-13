@@ -16,10 +16,10 @@ type Picker[T any] struct {
 
 	wg sync.WaitGroup
 
-	once    sync.Once
-	errOnce sync.Once
-	result  T
-	err     error
+	once   sync.Once
+	errMux sync.Mutex
+	result T
+	err    error
 }
 
 func newPicker[T any](ctx context.Context, cancel func()) *Picker[T] {
@@ -73,9 +73,9 @@ func (p *Picker[T]) Go(f func() (T, error)) {
 				}
 			})
 		} else {
-			p.errOnce.Do(func() {
-				p.err = errors.Join(p.err, err)
-			})
+			p.errMux.Lock()
+			p.err = errors.Join(p.err, err)
+			p.errMux.Unlock()
 		}
 	}()
 }

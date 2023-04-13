@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/netip"
+	"time"
 
 	"github.com/Dreamacro/clash/adapter"
 	"github.com/Dreamacro/clash/adapter/outbound"
@@ -14,12 +14,14 @@ import (
 	"github.com/Dreamacro/clash/component/resolver"
 	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/constant/provider"
+	"github.com/Dreamacro/clash/tunnel"
 )
 
 type Relay struct {
 	*outbound.Base
-	single    *singledo.Single[[]C.Proxy]
-	providers []provider.ProxyProvider
+	disableDNS bool
+	single     *singledo.Single[[]C.Proxy]
+	providers  []provider.ProxyProvider
 }
 
 // DialContext implements C.ProxyAdapter
@@ -31,12 +33,19 @@ func (r *Relay) DialContext(ctx context.Context, metadata *C.Metadata, opts ...d
 		}
 	}
 
-	switch len(proxies) {
+	length := len(proxies)
+
+	switch length {
 	case 0:
 		return outbound.NewDirect().DialContext(ctx, metadata, r.Base.DialOptions(opts...)...)
 	case 1:
 		return proxies[0].DialContext(ctx, metadata, r.Base.DialOptions(opts...)...)
 	}
+
+	timeout := time.Duration(length) * C.DefaultTCPTimeout
+	subCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ctx = subCtx
 
 	c, err := r.streamContext(ctx, proxies, r.Base.DialOptions(opts...)...)
 	if err != nil {
@@ -77,21 +86,27 @@ func (r *Relay) ListenPacketContext(ctx context.Context, metadata *C.Metadata, o
 	var (
 		firstIndex          = 0
 		nextIndex           = 1
-		lastUDPOverTCPIndex = -1
-		rawUDPRelay         = false
+		lastUDPOverTCPIndex int
+		rawUDPRelay         bool
 
 		first = proxies[firstIndex]
 		last  = proxies[length-1]
 
-		c           net.Conn
-		cc          net.Conn
-		err         error
-		currentMeta *C.Metadata
+		c   net.Conn
+		cc  net.Conn
+		err error
 	)
 
-	if !last.SupportUDP() {
-		return nil, fmt.Errorf("%s connect error: proxy [%s] UDP is not supported in relay chains", last.Addr(), last.Name())
+	if !supportPacketConn(last) {
+		return nil, fmt.Errorf(
+			"%s connect error: proxy [%s] UDP is not supported in relay chains", last.Addr(), last.Name(),
+		)
 	}
+
+	timeout := time.Duration(length) * C.DefaultTCPTimeout
+	subCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ctx = subCtx
 
 	rawUDPRelay, lastUDPOverTCPIndex = isRawUDPRelay(proxies)
 
@@ -122,6 +137,7 @@ func (r *Relay) ListenPacketContext(ctx context.Context, metadata *C.Metadata, o
 	}
 
 	if nextIndex < length {
+		var currentMeta *C.Metadata
 		for i, proxy := range proxies[nextIndex:] { // raw udp in loop
 			currentMeta, err = addrToMetadata(proxy.Addr())
 			if err != nil {
@@ -129,17 +145,15 @@ func (r *Relay) ListenPacketContext(ctx context.Context, metadata *C.Metadata, o
 			}
 			currentMeta.NetWork = C.UDP
 
-			if !isRawUDP(first) && !first.SupportUDP() {
-				return nil, fmt.Errorf("%s connect error: proxy [%s] UDP is not supported in relay chains", first.Addr(), first.Name())
+			if !supportPacketConn(first) {
+				return nil, fmt.Errorf(
+					"%s connect error: proxy [%s] UDP is not supported in relay chains", first.Addr(), first.Name(),
+				)
 			}
 
-			if needResolveIP(first, currentMeta) {
-				var ip netip.Addr
-				ip, err = resolver.ResolveProxyServerHost(currentMeta.Host)
-				if err != nil {
-					return nil, fmt.Errorf("can't resolve ip: %w", err)
-				}
-				currentMeta.DstIP = ip
+			err = resolveDNS(currentMeta)
+			if err != nil {
+				return nil, fmt.Errorf("can't resolve ip: %w", err)
 			}
 
 			if cc != nil { // socks5
@@ -193,6 +207,11 @@ func (r *Relay) SupportUDP() bool {
 	return isRawUDP(last) || last.SupportUDP()
 }
 
+// DisableDnsResolve implements C.DisableDnsResolve
+func (r *Relay) DisableDnsResolve() bool {
+	return r.disableDNS
+}
+
 // MarshalJSON implements C.ProxyAdapter
 func (r *Relay) MarshalJSON() ([]byte, error) {
 	var all []string
@@ -217,10 +236,10 @@ func (r *Relay) proxies(metadata *C.Metadata, touch bool) []C.Proxy {
 	proxies := r.rawProxies(touch)
 
 	for n, proxy := range proxies {
-		subproxy := proxy.Unwrap(metadata)
-		for subproxy != nil {
-			proxies[n] = subproxy
-			subproxy = subproxy.Unwrap(metadata)
+		subProxy := proxy.Unwrap(metadata)
+		for subProxy != nil {
+			proxies[n] = subProxy
+			subProxy = subProxy.Unwrap(metadata)
 		}
 	}
 
@@ -257,7 +276,8 @@ func (r *Relay) streamContext(ctx context.Context, proxies []C.Proxy, opts ...di
 }
 
 func streamSocks5PacketConn(proxy C.Proxy, cc, c net.Conn, metadata *C.Metadata) (net.Conn, error) {
-	pc, err := proxy.(*adapter.Proxy).ProxyAdapter.(*outbound.Socks5).StreamSocks5PacketConn(cc, c.(net.PacketConn), metadata)
+	pc, err := proxy.(*adapter.Proxy).ProxyAdapter.(*outbound.Socks5).
+		StreamSocks5PacketConn(cc, c.(net.PacketConn), metadata)
 	return outbound.WrapConn(pc), err
 }
 
@@ -288,20 +308,32 @@ func isRawUDPRelay(proxies []C.Proxy) (bool, int) {
 }
 
 func isRawUDP(proxy C.ProxyAdapter) bool {
-	if proxy.Type() == C.Shadowsocks || proxy.Type() == C.ShadowsocksR || proxy.Type() == C.Socks5 {
+	tp := proxy.Type()
+	if ((tp == C.Shadowsocks || tp == C.ShadowsocksR) && proxy.SupportUDP()) || tp == C.WireGuard || tp == C.Socks5 {
 		return true
 	}
 	return false
 }
 
-func needResolveIP(proxy C.ProxyAdapter, metadata *C.Metadata) bool {
-	if metadata.Resolved() {
+func supportPacketConn(proxy C.Proxy) bool {
+	tp := proxy.Type()
+	if (tp == C.Shadowsocks || tp == C.ShadowsocksR) && !proxy.SupportUDP() {
 		return false
 	}
-	if proxy.Type() != C.Vmess && proxy.Type() != C.Vless {
-		return false
+	return proxy.SupportUDP() || !tunnel.UDPFallbackMatch.Load()
+}
+
+func resolveDNS(metadata *C.Metadata) error {
+	if metadata.Host == "" || metadata.Resolved() {
+		return nil
 	}
-	return true
+
+	rAddrs, err := resolver.LookupIP(context.Background(), metadata.Host)
+	if err != nil {
+		return err
+	}
+	metadata.DstIP = rAddrs[0]
+	return nil
 }
 
 func NewRelay(option *GroupCommonOption, providers []provider.ProxyProvider) *Relay {
@@ -312,7 +344,8 @@ func NewRelay(option *GroupCommonOption, providers []provider.ProxyProvider) *Re
 			Interface:   option.Interface,
 			RoutingMark: option.RoutingMark,
 		}),
-		single:    singledo.NewSingle[[]C.Proxy](defaultGetProxiesDuration),
-		providers: providers,
+		single:     singledo.NewSingle[[]C.Proxy](defaultGetProxiesDuration),
+		providers:  providers,
+		disableDNS: option.DisableDNS,
 	}
 }

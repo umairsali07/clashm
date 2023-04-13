@@ -17,39 +17,36 @@ import (
 	"github.com/Dreamacro/clash/common/errors2"
 	"github.com/Dreamacro/clash/common/picker"
 	"github.com/Dreamacro/clash/component/dialer"
+	"github.com/Dreamacro/clash/component/resolver"
 	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/tunnel"
 )
 
-var errProxyNotFound = errors.New("proxy adapter not found")
-
-func putMsgToCache(c *cache.LruCache[string, *D.Msg], key string, msg *D.Msg) {
-	putMsgToCacheWithExpire(c, key, msg, 0)
+func putMsgToCache(c *cache.LruCache[string, *D.Msg], key string, msg *D.Msg, q D.Question) {
+	putMsgToCacheWithExpire(c, key, msg, q, 0)
 }
 
-func putMsgToCacheWithExpire(c *cache.LruCache[string, *D.Msg], key string, msg *D.Msg, ttl uint32) {
-	if len(msg.Question) == 0 {
-		log.Debug().Str("msg", msg.String()).Msg("[DNS] question msg empty")
-		return
-	}
-	if q := msg.Question[0]; q.Qtype == D.TypeTXT && strings.HasPrefix(q.Name, "_acme-challenge") {
+func putMsgToCacheWithExpire(c *cache.LruCache[string, *D.Msg], key string, msg *D.Msg, q D.Question, ttl uint32) {
+	if q.Qtype == D.TypeTXT && strings.HasPrefix(q.Name, "_acme-challenge") {
 		return
 	}
 
-	if ttl == 0 {
-		switch {
-		case len(msg.Answer) != 0:
-			ttl = msg.Answer[0].Header().Ttl
-		case len(msg.Ns) != 0:
-			ttl = msg.Ns[0].Header().Ttl
-		case len(msg.Extra) != 0:
-			ttl = msg.Extra[0].Header().Ttl
-		default:
-			log.Debug().Str("msg", msg.String()).Msg("[DNS] response msg empty")
-			return
-		}
+	if ttl > 0 {
+		goto set
 	}
 
+	switch {
+	case len(msg.Answer) != 0:
+		ttl = msg.Answer[0].Header().Ttl
+	case len(msg.Ns) != 0:
+		ttl = msg.Ns[0].Header().Ttl
+	case len(msg.Extra) != 0:
+		ttl = msg.Extra[0].Header().Ttl
+	default:
+		return
+	}
+
+set:
 	c.SetWithExpire(key, msg.Copy(), time.Now().Add(time.Second*time.Duration(ttl)))
 }
 
@@ -84,12 +81,12 @@ func isIPRequest(q D.Question) bool {
 	return q.Qclass == D.ClassINET && (q.Qtype == D.TypeA || q.Qtype == D.TypeAAAA)
 }
 
-func transform(servers []NameServer, resolver *Resolver) []dnsClient {
+func transform(servers []NameServer, r *Resolver) []dnsClient {
 	var ret []dnsClient
 	for _, s := range servers {
 		switch s.Net {
 		case "https":
-			ret = append(ret, newDoHClient(s.Addr, resolver, s.ProxyAdapter))
+			ret = append(ret, newDoHClient(s.Addr, s.Proxy, r))
 			continue
 		case "dhcp":
 			ret = append(ret, newDHCPClient(s.Addr))
@@ -101,6 +98,12 @@ func transform(servers []NameServer, resolver *Resolver) []dnsClient {
 		if _, err := netip.ParseAddr(host); err == nil {
 			ip = host
 		}
+		var timeout time.Duration
+		if s.Proxy != "" {
+			timeout = proxyTimeout
+		} else {
+			timeout = resolver.DefaultDNSTimeout
+		}
 		ret = append(ret, &client{
 			Client: &D.Client{
 				Net: s.Net,
@@ -108,15 +111,15 @@ func transform(servers []NameServer, resolver *Resolver) []dnsClient {
 					ServerName: host,
 				},
 				UDPSize: 4096,
-				Timeout: 5 * time.Second,
+				Timeout: timeout,
 			},
-			port:         port,
-			host:         host,
-			iface:        s.Interface,
-			r:            resolver,
-			proxyAdapter: s.ProxyAdapter,
-			isDHCP:       s.IsDHCP,
-			ip:           ip,
+			port:   port,
+			host:   host,
+			iface:  s.Interface,
+			r:      r,
+			proxy:  s.Proxy,
+			isDHCP: s.IsDHCP,
+			ip:     ip,
 		})
 	}
 	return ret
@@ -195,10 +198,22 @@ func (wpc *wrapPacketConn) RemoteAddr() net.Addr {
 	return wpc.rAddr
 }
 
-func dialContextWithProxyAdapter(ctx context.Context, adapterName string, network string, dstIP netip.Addr, port string, opts ...dialer.Option) (net.Conn, error) {
-	proxy, ok := tunnel.FindProxyByName(adapterName)
+func dialContextByProxyOrInterface(
+	ctx context.Context,
+	network string,
+	dstIP netip.Addr,
+	port string,
+	proxyOrInterface string,
+	opts ...dialer.Option,
+) (net.Conn, error) {
+	proxy, ok := tunnel.FindProxyByName(proxyOrInterface)
 	if !ok {
-		return nil, errProxyNotFound
+		opts = []dialer.Option{dialer.WithInterface(proxyOrInterface), dialer.WithRoutingMark(0)}
+		conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(dstIP.String(), port), opts...)
+		if err == nil {
+			return conn, nil
+		}
+		return nil, fmt.Errorf("proxy %s not found, %w", proxyOrInterface, err)
 	}
 
 	networkType := C.TCP
@@ -213,10 +228,10 @@ func dialContextWithProxyAdapter(ctx context.Context, adapterName string, networ
 		DstPort: port,
 	}
 
-	rawAdapter, _ := tunnel.FetchRawProxyAdapter(proxy, metadata, nil)
+	rawAdapter, _ := tunnel.FetchRawProxyAdapter(proxy, metadata)
 
 	if networkType == C.UDP {
-		if !rawAdapter.SupportUDP() {
+		if !rawAdapter.SupportUDP() && tunnel.UDPFallbackMatch.Load() {
 			return nil, fmt.Errorf("proxy adapter [%s] UDP is not supported", rawAdapter.Name())
 		}
 
@@ -261,8 +276,15 @@ func batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *D.M
 	return elm, nil
 }
 
-func logDnsResponse(q D.Question, msg *D.Msg, network, source, proxyAdapter string) {
-	if msg == nil || (q.Qtype != D.TypeA && q.Qtype != D.TypeAAAA) {
+func genMsgCacheKey(ctx context.Context, q D.Question) string {
+	if proxy, ok := resolver.GetProxy(ctx); ok && proxy != "" {
+		return fmt.Sprintf("%s:%s:%d:%d", proxy, q.Name, q.Qtype, q.Qclass)
+	}
+	return fmt.Sprintf("%s:%d:%d", q.Name, q.Qtype, q.Qclass)
+}
+
+func logDnsResponse(q D.Question, msg *D.Msg, err error, network, source, proxyAdapter string) {
+	if q.Qtype != D.TypeA && q.Qtype != D.TypeAAAA {
 		return
 	}
 
@@ -273,10 +295,20 @@ func logDnsResponse(q D.Question, msg *D.Msg, network, source, proxyAdapter stri
 	if proxyAdapter != "" {
 		pr = "(" + proxyAdapter + ")"
 	}
-	log.Debug().
-		Str("source", fmt.Sprintf("%s%s%s", network, source, pr)).
-		Str("qType", D.Type(q.Qtype).String()).
-		Str("name", q.Name).
-		Strs("answer", msgToIPStr(msg)).
-		Msg("[DNS] dns response")
+
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Debug().
+			Err(err).
+			Str("source", fmt.Sprintf("%s%s%s", network, source, pr)).
+			Str("qType", D.Type(q.Qtype).String()).
+			Str("name", q.Name).
+			Msg("[DNS] dns response failed")
+	} else if msg != nil {
+		log.Debug().
+			Str("source", fmt.Sprintf("%s%s%s", network, source, pr)).
+			Str("qType", D.Type(q.Qtype).String()).
+			Str("name", q.Name).
+			Strs("answer", msgToIPStr(msg)).
+			Msg("[DNS] dns response")
+	}
 }

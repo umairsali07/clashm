@@ -10,6 +10,7 @@ import (
 	"time"
 
 	D "github.com/miekg/dns"
+	"github.com/samber/lo"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/Dreamacro/clash/common/cache"
@@ -37,12 +38,13 @@ type Resolver struct {
 	hosts                 *trie.DomainTrie[netip.Addr]
 	main                  []dnsClient
 	fallback              []dnsClient
+	proxyServer           []dnsClient
+	remote                []dnsClient
 	fallbackDomainFilters []fallbackDomainFilter
 	fallbackIPFilters     []fallbackIPFilter
 	group                 singleflight.Group
 	lruCache              *cache.LruCache[string, *D.Msg]
 	policy                *trie.DomainTrie[*Policy]
-	proxyServer           []dnsClient
 	searchDomains         []string
 }
 
@@ -63,6 +65,11 @@ func (r *Resolver) LookupIP(ctx context.Context, host string) (ip []netip.Addr, 
 
 	ip, err = r.lookupIP(ctx1, host, D.TypeA)
 	if err == nil {
+		if resolver.IsRemote(ctx) { // force combine ipv6 list for remote resolve DNS
+			if ip6, open := <-ch; open {
+				ip = append(ip, ip6...)
+			}
+		}
 		return
 	}
 
@@ -139,12 +146,8 @@ func (r *Resolver) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, e
 
 	var (
 		q   = m.Question[0]
-		key = q.String()
+		key = genMsgCacheKey(ctx, q)
 	)
-
-	if p, ok := resolver.GetProxy(ctx); ok {
-		key += p
-	}
 
 	cacheM, expireTime, hit := r.lruCache.GetWithExpire(key)
 	if hit {
@@ -153,41 +156,33 @@ func (r *Resolver) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, e
 		if expireTime.Before(now) {
 			setMsgTTL(msg, uint32(1)) // Continue fetch
 			go func() {
-				_, _ = r.exchangeWithoutCache(ctx, m)
+				_, _ = r.exchangeWithoutCache(ctx, m, q, key)
 			}()
 		} else {
-			setMsgTTLWithForce(msg, uint32(time.Until(expireTime).Seconds()), !resolver.IsProxyServerIP(ctx))
+			setMsgTTLWithForce(msg, uint32(time.Until(expireTime).Seconds()), !resolver.IsProxyServer(ctx))
 		}
 		return
 	}
-	return r.exchangeWithoutCache(ctx, m)
+	return r.exchangeWithoutCache(ctx, m, q, key)
 }
 
 // ExchangeWithoutCache a batch of dns request, and it does NOT GET from cache
-func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
-	q := m.Question[0]
-
-	ret, err, shared := r.group.Do(q.String(), func() (result any, err error) {
+func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Question, key string) (msg *D.Msg, err error) {
+	ret, err, shared := r.group.Do(key, func() (result any, err error) {
 		defer func() {
 			if err != nil {
 				return
 			}
 
 			msg1 := result.(*D.Msg)
-
-			if resolver.IsProxyServerIP(ctx) {
+			if resolver.IsProxyServer(ctx) {
 				// reset proxy server ip ttl to at least 2 hours
 				setMsgTTLWithForce(msg1, 7200, false)
-				putMsgToCacheWithExpire(r.lruCache, q.String(), msg1, 7200)
+				putMsgToCacheWithExpire(r.lruCache, key, msg1, q, 7200)
 				return
 			}
 
-			key := q.String()
-			if p, ok := resolver.GetProxy(ctx); ok {
-				key += p
-			}
-
-			putMsgToCache(r.lruCache, key, msg1)
+			putMsgToCache(r.lruCache, key, msg1, q)
 		}()
 
 		isIPReq := isIPRequest(q)
@@ -259,9 +254,19 @@ func (r *Resolver) shouldOnlyQueryFallback(domain string) bool {
 }
 
 func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
+	if resolver.IsRemote(ctx) && r.remote != nil {
+		res := <-r.asyncExchange(ctx, r.remote, m)
+		return res.Msg, res.Error
+	}
+
 	domain := r.msgToDomain(m)
 	if matched := r.matchPolicy(domain); len(matched) != 0 {
 		res := <-r.asyncExchange(ctx, matched, m)
+		return res.Msg, res.Error
+	}
+
+	if resolver.IsProxyServer(ctx) && r.proxyServer != nil {
+		res := <-r.asyncExchange(ctx, r.proxyServer, m)
 		return res.Msg, res.Error
 	}
 
@@ -358,25 +363,19 @@ func (r *Resolver) asyncExchange(ctx context.Context, client []dnsClient, msg *D
 	return ch
 }
 
-// HasProxyServer has proxy server dns client
-func (r *Resolver) HasProxyServer() bool {
-	return len(r.main) > 0
-}
-
 func (r *Resolver) RemoveCache(host string) {
-	n := D.Fqdn(host)
-	q1 := D.Question{Name: n, Qtype: D.TypeA, Qclass: D.ClassINET}
-	q2 := D.Question{Name: n, Qtype: D.TypeAAAA, Qclass: D.ClassINET}
-	r.lruCache.Delete(q1.String())
-	r.lruCache.Delete(q2.String())
+	q := D.Question{Name: D.Fqdn(host), Qtype: D.TypeA, Qclass: D.ClassINET}
+	r.lruCache.Delete(genMsgCacheKey(context.Background(), q))
+	q.Qtype = D.TypeAAAA
+	r.lruCache.Delete(genMsgCacheKey(context.Background(), q))
 }
 
 type NameServer struct {
-	Net          string
-	Addr         string
-	Interface    string
-	ProxyAdapter string
-	IsDHCP       bool
+	Net       string
+	Addr      string
+	Interface string
+	Proxy     string
+	IsDHCP    bool
 }
 
 type FallbackFilter struct {
@@ -391,6 +390,7 @@ type Config struct {
 	Main, Fallback []NameServer
 	Default        []NameServer
 	ProxyServer    []NameServer
+	Remote         []NameServer
 	IPv6           bool
 	EnhancedMode   C.DNSMode
 	FallbackFilter FallbackFilter
@@ -402,14 +402,20 @@ type Config struct {
 
 func NewResolver(config Config) *Resolver {
 	defaultResolver := &Resolver{
-		main:     transform(config.Default, nil),
-		lruCache: cache.New[string, *D.Msg](cache.WithSize[string, *D.Msg](1024), cache.WithStale[string, *D.Msg](true)),
+		main: transform(config.Default, nil),
+		lruCache: cache.New[string, *D.Msg](
+			cache.WithSize[string, *D.Msg](128),
+			cache.WithStale[string, *D.Msg](true),
+		),
 	}
 
 	r := &Resolver{
-		ipv6:          config.IPv6,
-		main:          transform(config.Main, defaultResolver),
-		lruCache:      cache.New[string, *D.Msg](cache.WithSize[string, *D.Msg](8192), cache.WithStale[string, *D.Msg](true)),
+		ipv6: config.IPv6,
+		main: transform(config.Main, defaultResolver),
+		lruCache: cache.New[string, *D.Msg](
+			cache.WithSize[string, *D.Msg](10240),
+			cache.WithStale[string, *D.Msg](true),
+		),
 		hosts:         config.Hosts,
 		searchDomains: config.SearchDomains,
 	}
@@ -420,6 +426,14 @@ func NewResolver(config Config) *Resolver {
 
 	if len(config.ProxyServer) != 0 {
 		r.proxyServer = transform(config.ProxyServer, defaultResolver)
+	}
+
+	if len(config.Remote) != 0 {
+		remotes := lo.Map(config.Remote, func(item NameServer, _ int) NameServer {
+			item.Proxy = "remote-resolver"
+			return item
+		})
+		r.remote = transform(remotes, defaultResolver)
 	}
 
 	if len(config.Policy) != 0 {
@@ -452,35 +466,5 @@ func NewResolver(config Config) *Resolver {
 	}
 	r.fallbackDomainFilters = fallbackDomainFilters
 
-	return r
-}
-
-func NewProxyServerHostResolver(old *Resolver) *Resolver {
-	r := &Resolver{
-		ipv6:          old.ipv6,
-		main:          old.proxyServer,
-		lruCache:      old.lruCache,
-		hosts:         old.hosts,
-		policy:        old.policy,
-		searchDomains: old.searchDomains,
-	}
-	return r
-}
-
-func NewRemoteResolver(ipv6 bool) *Resolver {
-	r := &Resolver{
-		ipv6: ipv6,
-		main: transform([]NameServer{
-			{
-				Net:  "udp",
-				Addr: "1.1.1.1:53",
-			},
-			{
-				Net:  "tcp",
-				Addr: "8.8.8.8:53",
-			},
-		}, nil),
-		lruCache: cache.New[string, *D.Msg](cache.WithSize[string, *D.Msg](2048), cache.WithStale[string, *D.Msg](true)),
-	}
 	return r
 }

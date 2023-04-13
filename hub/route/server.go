@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/gorilla/websocket"
 	"github.com/phuslu/log"
+	"go.uber.org/atomic"
 
 	"github.com/Dreamacro/clash/common/observable"
 	C "github.com/Dreamacro/clash/constant"
@@ -26,7 +27,9 @@ var (
 
 	uiPath = ""
 
-	bootTime = time.Now()
+	enablePPORF bool
+
+	bootTime = atomic.NewTime(time.Now())
 
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -42,6 +45,10 @@ type Traffic struct {
 
 func SetUIPath(path string) {
 	uiPath = C.Path.Resolve(path)
+}
+
+func SetPPROF(pprof bool) {
+	enablePPORF = pprof
 }
 
 func Start(addr string, secret string) {
@@ -88,6 +95,10 @@ func Start(addr string, secret string) {
 				fs.ServeHTTP(w, r)
 			})
 		})
+	}
+
+	if enablePPORF {
+		r.Mount("/debug/pprof", pprofRouter())
 	}
 
 	l, err := net.Listen("tcp", addr)
@@ -288,5 +299,8 @@ func version(w http.ResponseWriter, r *http.Request) {
 }
 
 func uptime(w http.ResponseWriter, r *http.Request) {
-	render.JSON(w, r, render.M{"uptime": time.Since(bootTime).String()})
+	bt := bootTime.Load()
+	render.JSON(w, r, render.M{
+		"bootTime": bt.Format("2006-01-02 15:04:05 Mon -0700"),
+	})
 }

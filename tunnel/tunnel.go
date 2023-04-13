@@ -15,10 +15,10 @@ import (
 	"github.com/phuslu/log"
 	"github.com/samber/lo"
 	"go.uber.org/atomic"
+	"golang.org/x/sync/singleflight"
 
 	A "github.com/Dreamacro/clash/adapter"
 	"github.com/Dreamacro/clash/adapter/inbound"
-	"github.com/Dreamacro/clash/adapter/outbound"
 	"github.com/Dreamacro/clash/component/nat"
 	P "github.com/Dreamacro/clash/component/process"
 	"github.com/Dreamacro/clash/component/resolver"
@@ -63,6 +63,8 @@ var (
 		}
 		return providersMap
 	}
+
+	rawProxySingle singleflight.Group
 
 	UDPFallbackMatch  = atomic.NewBool(false)
 	UDPFallbackPolicy = atomic.NewString("")
@@ -125,14 +127,38 @@ func FindProxyByName(name string) (proxy C.Proxy, found bool) {
 	return
 }
 
-func FetchRawProxyAdapter(proxy C.Proxy, metadata *C.Metadata, chains []string) (C.Proxy, []string) {
-	if chains != nil {
+type rawProxyWrap struct {
+	proxy  C.Proxy
+	chains []string
+}
+
+func FetchRawProxyAdapter(proxy C.Proxy, metadata *C.Metadata) (C.Proxy, []string) {
+	result, _, _ := rawProxySingle.Do(proxy.Name(), func() (any, error) {
+		var chains []string
 		chains = append(chains, proxy.Name())
-	}
-	if p := proxy.Unwrap(metadata); p != nil {
-		return FetchRawProxyAdapter(p, metadata, chains)
-	}
-	return proxy, chains
+		var (
+			rawProxy C.Proxy
+			subProxy = proxy.Unwrap(metadata)
+		)
+		for subProxy != nil {
+			chains = append(chains, subProxy.Name())
+			rawProxy = subProxy
+			subProxy = subProxy.Unwrap(metadata)
+		}
+		if rawProxy != nil {
+			return &rawProxyWrap{
+				proxy:  rawProxy,
+				chains: chains,
+			}, nil
+		}
+		return &rawProxyWrap{
+			proxy:  proxy,
+			chains: chains,
+		}, nil
+	})
+
+	rawProxy := result.(*rawProxyWrap)
+	return rawProxy.proxy, rawProxy.chains
 }
 
 // UpdateProxies handle update proxies
@@ -281,38 +307,71 @@ func resolveMetadata(_ C.PlainContext, metadata *C.Metadata) (proxy C.Proxy, rul
 	return
 }
 
-func remoteResolveDNS(metadata *C.Metadata, proxy string, shouldRemoteResolve bool) (ok bool, err error) {
-	if proxy == "REJECT" {
+func resolveDNS(metadata *C.Metadata, proxy, rawProxy C.Proxy) (isRemote bool, err error) {
+	if metadata.Host == "" || metadata.DNSMode == C.DNSMapping {
 		return
 	}
-	if shouldRemoteResolve {
-		if proxy == "DIRECT" {
-			if !metadata.Resolved() {
-				var rAddr netip.Addr
-				rAddr, err = resolver.LookupFirstIP(context.Background(), metadata.Host)
-				if err != nil {
-					return
-				}
-				metadata.DstIP = rAddr
-			}
+
+	if proxy.DisableDnsResolve() || rawProxy.DisableDnsResolve() {
+		isRemote = false
+	} else {
+		isRemote = resolver.RemoteDnsResolve
+	}
+
+	isUDP := metadata.NetWork == C.UDP
+
+	if isRemote {
+		var (
+			hasV6  = rawProxy.HasV6()
+			rAddrs []netip.Addr
+		)
+		if hasV6 {
+			rAddrs, err = resolver.LookupIPByProxy(context.Background(), metadata.Host, rawProxy.Name())
 		} else {
-			ok = true
-			var rAddr netip.Addr
-			rAddr, err = resolver.ResolveIPByProxy(metadata.Host, proxy, true)
-			if err != nil {
-				return
-			}
-			metadata.DstIP = rAddr
+			rAddrs, err = resolver.LookupIPv4ByProxy(context.Background(), metadata.Host, rawProxy.Name())
 		}
-	} else if !metadata.Resolved() {
-		var rAddr netip.Addr
-		rAddr, err = resolver.LookupFirstIP(context.Background(), metadata.Host)
 		if err != nil {
 			return
 		}
-		metadata.DstIP = rAddr
+		if isUDP {
+			metadata.DstIP = rAddrs[0]
+		} else {
+			if hasV6 {
+				v6 := lo.Filter(rAddrs, func(addr netip.Addr, _ int) bool {
+					return addr.Is6()
+				})
+				if len(v6) > 0 {
+					rAddrs = v6 // priority use ipv6
+				}
+			}
+			metadata.DstIP = rAddrs[rand.Intn(len(rAddrs))]
+		}
+	} else if isUDP {
+		err = localResolveDNS(metadata, true)
+	} else { // tcp
+		if proxy.DisableDnsResolve() && !rawProxy.DisableDnsResolve() {
+			err = localResolveDNS(metadata, false)
+		} else {
+			metadata.DstIP = netip.Addr{}
+		}
 	}
 	return
+}
+
+func localResolveDNS(metadata *C.Metadata, udp bool) error {
+	if metadata.Resolved() {
+		return nil
+	}
+	rAddrs, err := resolver.LookupIP(context.Background(), metadata.Host)
+	if err != nil {
+		return err
+	}
+	if udp {
+		metadata.DstIP = rAddrs[0]
+	} else {
+		metadata.DstIP = rAddrs[rand.Intn(len(rAddrs))]
+	}
+	return nil
 }
 
 func handleUDPConn(packet *inbound.PacketAdapter) {
@@ -359,6 +418,7 @@ func handleUDPConn(packet *inbound.PacketAdapter) {
 	}
 
 	if handle() {
+		packet.Drop()
 		return
 	}
 
@@ -366,6 +426,8 @@ func handleUDPConn(packet *inbound.PacketAdapter) {
 	cond, loaded := natTable.GetOrCreateLock(lockKey)
 
 	go func() {
+		defer packet.Drop()
+
 		if loaded {
 			cond.L.Lock()
 			cond.Wait()
@@ -374,36 +436,30 @@ func handleUDPConn(packet *inbound.PacketAdapter) {
 			return
 		}
 
-		var hdlErr error
-
 		defer func() {
 			natTable.Delete(lockKey)
 			cond.Broadcast()
-			if hdlErr != nil {
-				packet.Drop()
-			}
 		}()
 
 		pCtx := icontext.NewPacketConnContext(metadata)
-		proxy, rule, hdlErr := resolveMetadata(pCtx, metadata)
-		if hdlErr != nil {
-			log.Warn().Err(hdlErr).Msg("[Metadata] parse failed")
+		proxy, rule, err := resolveMetadata(pCtx, metadata)
+		if err != nil {
+			log.Warn().Err(err).Msg("[Metadata] parse failed")
 			return
 		}
 
-		rawProxy, chains := FetchRawProxyAdapter(proxy, metadata, []string{})
-		rawName := rawProxy.Name()
+		rawProxy, chains := FetchRawProxyAdapter(proxy, metadata)
 
-		isRemote, hdlErr := remoteResolveDNS(metadata, rawName, shouldRemoteResolveIP(rawProxy))
-		if hdlErr != nil {
+		isRemote, err := resolveDNS(metadata, proxy, rawProxy)
+		if err != nil {
 			if isRemote {
-				log.Warn().Err(hdlErr).
-					Str("proxy", rawName).
-					Str("rAddr", metadata.RemoteAddress()).
+				log.Warn().Err(err).
+					Str("proxy", rawProxy.Name()).
+					Str("host", metadata.Host).
 					Msg("[UDP] remote resolve DNS failed")
 			} else {
-				log.Warn().Err(hdlErr).
-					Str("rAddr", metadata.RemoteAddress()).
+				log.Warn().Err(err).
+					Str("host", metadata.Host).
 					Msg("[UDP] resolve DNS failed")
 			}
 			return
@@ -412,18 +468,18 @@ func handleUDPConn(packet *inbound.PacketAdapter) {
 		ctx, cancel := context.WithTimeout(context.Background(), C.DefaultUDPTimeout)
 		defer cancel()
 
-		rawPc, hdlErr := rawProxy.ListenPacketContext(ctx, metadata.Pure(false))
-		if hdlErr != nil {
+		rawPc, err := rawProxy.ListenPacketContext(ctx, metadata)
+		if err != nil {
 			if rule == nil {
 				log.Warn().
-					Err(hdlErr).
-					Str("proxy", rawName).
+					Err(err).
+					Str("proxy", rawProxy.Name()).
 					Str("rAddr", metadata.RemoteAddress()).
 					Msg("[UDP] dial failed")
 			} else {
 				log.Warn().
-					Err(hdlErr).
-					Str("proxy", rawName).
+					Err(err).
+					Str("proxy", rawProxy.Name()).
 					Str("rAddr", metadata.RemoteAddress()).
 					Str("rule", rule.RuleType().String()).
 					Str("rulePayload", rule.Payload()).
@@ -492,22 +548,47 @@ func handleTCPConn(connCtx C.ConnContext) {
 		return
 	}
 
-	isMitmOutbound := proxy == mitmProxy
+	var (
+		rawProxy C.Proxy
+		chains   []string
+
+		isMitmOutbound = proxy == mitmProxy
+	)
+
+	if !isMitmOutbound && metadata.SpecialProxy == "" {
+		rawProxy, chains = FetchRawProxyAdapter(proxy, metadata)
+		isRemote, err2 := resolveDNS(metadata, proxy, rawProxy)
+		if err2 != nil {
+			if isRemote {
+				log.Warn().Err(err2).
+					Str("proxy", rawProxy.Name()).
+					Str("host", metadata.Host).
+					Msg("[TCP] remote resolve DNS failed")
+			} else {
+				log.Warn().Err(err2).
+					Str("host", metadata.Host).
+					Msg("[TCP] resolve DNS failed")
+			}
+			return
+		}
+	} else {
+		rawProxy = proxy
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), C.DefaultTCPTimeout)
 	defer cancel()
-	remoteConn, err := proxy.DialContext(ctx, metadata.Pure(isMitmOutbound))
+	remoteConn, err := rawProxy.DialContext(ctx, metadata)
 	if err != nil {
 		if rule == nil {
 			log.Warn().
 				Err(err).
-				Str("proxy", proxy.Name()).
+				Str("proxy", rawProxy.Name()).
 				Str("rAddr", metadata.RemoteAddress()).
 				Msg("[TCP] dial failed")
 		} else {
 			log.Warn().
 				Err(err).
-				Str("proxy", proxy.Name()).
+				Str("proxy", rawProxy.Name()).
 				Str("rAddr", metadata.RemoteAddress()).
 				Str("rule", rule.RuleType().String()).
 				Str("rulePayload", rule.Payload()).
@@ -516,7 +597,11 @@ func handleTCPConn(connCtx C.ConnContext) {
 		return
 	}
 
-	if remoteConn.Chains().Last() != "REJECT" && !isMitmOutbound {
+	if len(chains) > 1 {
+		remoteConn.SetChains(lo.Reverse(chains))
+	}
+
+	if rawProxy.Name() != "REJECT" && !isMitmOutbound {
 		remoteConn = statistic.NewTCPTracker(remoteConn, statistic.DefaultManager, metadata, rule)
 		if sniffing {
 			remoteConn = statistic.NewSniffing(remoteConn, metadata, rule)
@@ -557,13 +642,6 @@ func handleTCPConn(connCtx C.ConnContext) {
 
 func shouldResolveIP(rule C.Rule, metadata *C.Metadata) bool {
 	return rule.ShouldResolveIP() && metadata.Host != "" && !metadata.DstIP.IsValid()
-}
-
-func shouldRemoteResolveIP(proxy C.Proxy) bool {
-	if proxy.Type() == C.WireGuard {
-		return proxy.(*A.Proxy).ProxyAdapter.(*outbound.WireGuard).RemoteDnsResolve()
-	}
-	return resolver.RemoteDnsResolve
 }
 
 func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
@@ -608,10 +686,10 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 
 			srcPort, err := strconv.ParseUint(metadata.SrcPort, 10, 16)
 			if err == nil {
-				path, err := P.FindProcessName(metadata.NetWork.String(), metadata.SrcIP, int(srcPort))
-				if err != nil {
+				path, err2 := P.FindProcessName(metadata.NetWork.String(), metadata.SrcIP, int(srcPort))
+				if err2 != nil {
 					log.Debug().
-						Err(err).
+						Err(err2).
 						Str("addr", metadata.String()).
 						Msg("[Matcher] find process failed")
 				} else {
@@ -627,15 +705,8 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 		}
 
 		if rule.Match(metadata) {
-			adapter, ok := proxies[rule.Adapter()]
+			adapter, ok := FindProxyByName(rule.Adapter())
 			if !ok {
-				continue
-			}
-
-			if metadata.NetWork == C.UDP && !adapter.SupportUDP() && UDPFallbackMatch.Load() {
-				log.Debug().
-					Str("proxy", adapter.Name()).
-					Msg("[Matcher] UDP is not supported, skip match")
 				continue
 			}
 
@@ -654,12 +725,27 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 				}
 			}
 
+			if metadata.NetWork == C.UDP && !adapter.SupportUDP() {
+				if !UDPFallbackMatch.Load() {
+					policy := UDPFallbackPolicy.Load()
+					if policy != "" {
+						if adapter2, ok2 := FindProxyByName(policy); ok2 {
+							return adapter2, rule, nil
+						}
+						log.Warn().
+							Str("policy", policy).
+							Msg("[Matcher] UDP fallback policy not found, skip use policy")
+					}
+				} else {
+					log.Debug().
+						Str("proxy", adapter.Name()).
+						Msg("[Matcher] UDP is not supported, skip match")
+					continue
+				}
+			}
+
 			return adapter, rule, nil
 		}
-	}
-
-	if adapter, ok := proxies[UDPFallbackPolicy.Load()]; ok {
-		return adapter, nil, nil
 	}
 
 	return proxies["REJECT"], nil, nil
@@ -673,20 +759,34 @@ func matchScript(metadata *C.Metadata) (C.Proxy, error) {
 		metadata.DstIP = node.Data
 	}
 
-	adapter, err := scriptMainMatcher.Eval(metadata)
+	adapterName, err := scriptMainMatcher.Eval(metadata)
 	if err != nil {
 		return nil, err
 	}
 
-	if proxy, ok := proxies[adapter]; !ok {
-		return nil, fmt.Errorf("proxy adapter [%s] not found by script", adapter)
-	} else if metadata.NetWork == C.UDP && !proxy.SupportUDP() {
-		if UDPFallbackMatch.Load() {
-			return nil, fmt.Errorf("proxy adapter [%s] UDP is not supported", adapter)
-		} else if proxy, ok = proxies[UDPFallbackPolicy.Load()]; ok {
-			return proxy, nil
+	adapter, ok := FindProxyByName(adapterName)
+	if !ok {
+		return nil, fmt.Errorf("proxy adapter [%s] not found by script", adapterName)
+	}
+
+	if metadata.NetWork == C.UDP && !adapter.SupportUDP() {
+		if !UDPFallbackMatch.Load() {
+			policy := UDPFallbackPolicy.Load()
+			if policy != "" {
+				if adapter2, ok2 := FindProxyByName(policy); ok2 {
+					return adapter2, nil
+				}
+				log.Warn().
+					Str("policy", policy).
+					Msg("[Matcher] UDP fallback policy not found, skip use policy")
+			}
+		} else {
+			log.Debug().
+				Str("proxy", adapterName).
+				Msg("[Matcher] UDP is not supported, use `REJECT` policy")
+			return proxies["REJECT"], nil
 		}
 	}
 
-	return proxies[adapter], nil
+	return adapter, nil
 }

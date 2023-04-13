@@ -20,7 +20,6 @@ import (
 	"github.com/Dreamacro/clash/adapter/outboundgroup"
 	"github.com/Dreamacro/clash/adapter/provider"
 	"github.com/Dreamacro/clash/component/auth"
-	"github.com/Dreamacro/clash/component/dialer"
 	"github.com/Dreamacro/clash/component/fakeip"
 	"github.com/Dreamacro/clash/component/geodata"
 	"github.com/Dreamacro/clash/component/geodata/router"
@@ -31,7 +30,6 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 	providerTypes "github.com/Dreamacro/clash/constant/provider"
 	"github.com/Dreamacro/clash/dns"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/commons"
 	L "github.com/Dreamacro/clash/log"
 	rewrites "github.com/Dreamacro/clash/rewrite"
 	R "github.com/Dreamacro/clash/rule"
@@ -70,6 +68,7 @@ type Controller struct {
 	ExternalController string `json:"-"`
 	ExternalUI         string `json:"-"`
 	Secret             string `json:"-"`
+	PPROF              bool   `json:"-"`
 }
 
 // DNS config
@@ -79,6 +78,8 @@ type DNS struct {
 	RemoteDnsResolve      bool             `yaml:"remote-dns-resolve"`
 	NameServer            []dns.NameServer `yaml:"nameserver"`
 	Fallback              []dns.NameServer `yaml:"fallback"`
+	ProxyServerNameserver []dns.NameServer `yaml:"proxy-server-nameserver"`
+	RemoteNameserver      []dns.NameServer `yaml:"remote-nameserver"`
 	FallbackFilter        FallbackFilter   `yaml:"fallback-filter"`
 	Listen                string           `yaml:"listen"`
 	EnhancedMode          C.DNSMode        `yaml:"enhanced-mode"`
@@ -86,7 +87,6 @@ type DNS struct {
 	FakeIPRange           *fakeip.Pool
 	Hosts                 *trie.DomainTrie[netip.Addr]
 	NameServerPolicy      map[string]dns.NameServer
-	ProxyServerNameserver []dns.NameServer
 	SearchDomains         []string
 }
 
@@ -116,6 +116,7 @@ type Tun struct {
 	AutoDetectInterface bool          `yaml:"auto-detect-interface" json:"auto-detect-interface"`
 	TunAddressPrefix    *netip.Prefix `yaml:"-" json:"-"`
 	RedirectToTun       []string      `yaml:"-" json:"-"`
+	StopRouteListener   bool          `yaml:"-" json:"-"`
 }
 
 // Script config
@@ -176,6 +177,7 @@ type RawDNS struct {
 	NameServerPolicy      map[string]string `yaml:"nameserver-policy"`
 	ProxyServerNameserver []string          `yaml:"proxy-server-nameserver"`
 	SearchDomains         []string          `yaml:"search-domains"`
+	RemoteNameserver      []string          `yaml:"remote-nameserver"`
 }
 
 type RawFallbackFilter struct {
@@ -265,6 +267,7 @@ type RawConfig struct {
 	ExternalController string       `yaml:"external-controller"`
 	ExternalUI         string       `yaml:"external-ui"`
 	Secret             string       `yaml:"secret"`
+	PPROF              bool         `yaml:"pprof"`
 	Interface          string       `yaml:"interface-name"`
 	RoutingMark        int          `yaml:"routing-mark"`
 	Sniffing           bool         `yaml:"sniffing"`
@@ -338,7 +341,6 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 			Enable:           false,
 			UseHosts:         true,
 			RemoteDnsResolve: true,
-			EnhancedMode:     C.DNSMapping,
 			FakeIPRange:      "198.18.0.1/16",
 			FallbackFilter: RawFallbackFilter{
 				GeoIP:     true,
@@ -353,6 +355,10 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 			NameServer: []string{ // default if user not set
 				"https://120.53.53.53/dns-query",
 				"tls://223.5.5.5:853",
+			},
+			RemoteNameserver: []string{ // default if user not set
+				"tcp://1.1.1.1",
+				"tcp://8.8.8.8",
 			},
 		},
 		MITM: RawMitm{
@@ -373,12 +379,22 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 }
 
 func ParseRawConfig(rawCfg *RawConfig) (config *Config, err error) {
+	oldLevel := L.Level()
 	defer func() {
 		if err != nil {
 			providerTypes.Cleanup(config.Proxies, config.Providers)
+			L.SetLevel(oldLevel)
+			config = nil
 		}
 		geodata.CleanGeoSiteCache()
+		runtime.GC()
 	}()
+
+	if rawCfg.LogLevel == L.DEBUG {
+		L.SetLevel(L.DEBUG)
+	} else {
+		L.SetLevel(L.INFO)
+	}
 
 	config = &Config{}
 
@@ -472,21 +488,6 @@ func parseGeneral(cfg *RawConfig) (*General, error) {
 		}
 	}
 
-	if cfg.Tun.Enable && cfg.Tun.AutoDetectInterface {
-		outboundInterface, err := commons.GetAutoDetectInterface()
-		if err != nil && cfg.Interface == "" {
-			return nil, fmt.Errorf("get auto detect interface fail: %w", err)
-		}
-
-		if outboundInterface != "" {
-			cfg.Interface = outboundInterface
-		}
-	}
-
-	if dialer.DefaultInterface.Load() == "" {
-		dialer.DefaultInterface.Store(cfg.Interface)
-	}
-
 	cfg.Tun.RedirectToTun = cfg.EBpf.RedirectToTun
 
 	return &General{
@@ -504,6 +505,7 @@ func parseGeneral(cfg *RawConfig) (*General, error) {
 			ExternalController: cfg.ExternalController,
 			ExternalUI:         cfg.ExternalUI,
 			Secret:             cfg.Secret,
+			PPROF:              cfg.PPROF,
 		},
 		Mode:        cfg.Mode,
 		LogLevel:    cfg.LogLevel,
@@ -516,9 +518,9 @@ func parseGeneral(cfg *RawConfig) (*General, error) {
 	}, nil
 }
 
-func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[string]providerTypes.ProxyProvider, err error) {
-	proxies = make(map[string]C.Proxy)
-	providersMap = make(map[string]providerTypes.ProxyProvider)
+func parseProxies(cfg *RawConfig) (proxiesMap map[string]C.Proxy, pdsMap map[string]providerTypes.ProxyProvider, err error) {
+	proxies := make(map[string]C.Proxy)
+	providersMap := make(map[string]providerTypes.ProxyProvider)
 	proxiesConfig := cfg.Proxy
 	groupsConfig := cfg.ProxyGroup
 	providersConfig := cfg.ProxyProvider
@@ -529,6 +531,12 @@ func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[
 	proxies["DIRECT"] = adapter.NewProxy(outbound.NewDirect())
 	proxies["REJECT"] = adapter.NewProxy(outbound.NewReject())
 	proxyList = append(proxyList, "DIRECT", "REJECT")
+
+	defer func() {
+		if err != nil {
+			providerTypes.Cleanup(proxies, providersMap)
+		}
+	}()
 
 	// parse proxy
 	for idx, mapping := range proxiesConfig {
@@ -561,7 +569,9 @@ func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[
 	// parse and initial providers
 	for name, mapping := range providersConfig {
 		if name == provider.ReservedName {
-			return nil, nil, fmt.Errorf("can not defined a provider called `%s`", provider.ReservedName)
+			return nil, nil, fmt.Errorf(
+				"can not defined a provider called `%s`", provider.ReservedName,
+			)
 		}
 
 		pd, err := provider.ParseProxyProvider(name, mapping, forceCertVerify)
@@ -575,7 +585,9 @@ func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[
 	for _, proxyProvider := range providersMap {
 		log.Info().Str("name", proxyProvider.Name()).Msg("[Config] initial proxy provider")
 		if err := proxyProvider.Initial(); err != nil {
-			return nil, nil, fmt.Errorf("initial proxy provider %s error: %w", proxyProvider.Name(), err)
+			return nil, nil, fmt.Errorf(
+				"initial proxy provider %s error: %w", proxyProvider.Name(), err,
+			)
 		}
 	}
 
@@ -602,7 +614,9 @@ func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[
 
 		log.Info().Str("name", pd.Name()).Msg("[Config] initial compatible provider")
 		if err := pd.Initial(); err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf(
+				"initial compatible provider %s error: %w", pd.Name(), err,
+			)
 		}
 	}
 
@@ -611,7 +625,8 @@ func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[
 		ps = append(ps, proxies[v])
 	}
 	hc := provider.NewHealthCheck(ps, "", 0, true)
-	pd, _ := provider.NewCompatibleProvider(provider.ReservedName, ps, hc)
+	pd, _ := provider.NewCompatibleProvider(provider.ReservedName, hc, nil)
+	pd.SetProxies(ps)
 	providersMap[provider.ReservedName] = pd
 
 	global := outboundgroup.NewSelector(
@@ -685,7 +700,9 @@ func parseRules(cfg *RawConfig, proxies map[string]C.Proxy, matchers map[string]
 		if scr, ok := parsed.(*R.Script); ok {
 			m := matchers[payload]
 			if m == nil {
-				return nil, nil, fmt.Errorf("rules[%d] [%s] error: shortcut name [%s] not found", idx, line, payload)
+				return nil, nil, fmt.Errorf(
+					"rules[%d] [%s] error: shortcut name [%s] not found", idx, line, payload,
+				)
 			}
 			scr.SetMatcher(m)
 		}
@@ -787,10 +804,9 @@ func parseNameServer(servers []string) ([]dns.NameServer, error) {
 		nameservers = append(
 			nameservers,
 			dns.NameServer{
-				Net:          dnsNetType,
-				Addr:         addr,
-				ProxyAdapter: u.Fragment,
-				Interface:    dialer.DefaultInterface.Load(),
+				Net:   dnsNetType,
+				Addr:  addr,
+				Proxy: u.Fragment,
 			},
 		)
 	}
@@ -842,9 +858,11 @@ func parseFallbackGeoSite(countries []string) ([]*router.DomainMatcher, error) {
 		if recordsCount == 0 {
 			cont = "from cache"
 		}
-		log.Info().Str("country", country).Str("records", cont).Msg("[Config] initial GeoSite dns fallback filter")
+		log.Info().
+			Str("country", country).
+			Str("records", cont).
+			Msg("[Config] initial GeoSite dns fallback filter")
 	}
-	runtime.GC()
 	return sites, nil
 }
 
@@ -880,6 +898,21 @@ func parseDNS(rawCfg *RawConfig, hosts *trie.DomainTrie[netip.Addr]) (*DNS, erro
 
 	if dnsCfg.ProxyServerNameserver, err = parseNameServer(cfg.ProxyServerNameserver); err != nil {
 		return nil, err
+	}
+
+	if cfg.RemoteDnsResolve && len(cfg.RemoteNameserver) == 0 {
+		return nil, errors.New(
+			"remote nameserver should have at least one nameserver when `remote-dns-resolve` is enable",
+		)
+	}
+	if dnsCfg.RemoteNameserver, err = parseNameServer(cfg.RemoteNameserver); err != nil {
+		return nil, err
+	}
+	// check remote nameserver should not include any dhcp client
+	for _, ns := range dnsCfg.RemoteNameserver {
+		if ns.Net == "dhcp" {
+			return nil, errors.New("remote nameserver should not contain any dhcp client")
+		}
 	}
 
 	if len(cfg.DefaultNameserver) == 0 {
