@@ -6,10 +6,10 @@ require (
 	github.com/Dreamacro/clash v0.0.0
 	github.com/docker/docker v20.10.23+incompatible
 	github.com/docker/go-connections v0.4.0
-	github.com/miekg/dns v1.1.53
+	github.com/miekg/dns v1.1.54
 	github.com/stretchr/testify v1.8.2
 	go.uber.org/automaxprocs v1.5.2
-	golang.org/x/net v0.9.0
+	golang.org/x/net v0.10.0
 )
 
 replace github.com/Dreamacro/clash => ../
