@@ -1,7 +1,7 @@
 package route
 
 import (
-	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -16,13 +16,14 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/Dreamacro/clash/common/observable"
+	"github.com/Dreamacro/clash/common/pool"
 	C "github.com/Dreamacro/clash/constant"
 	L "github.com/Dreamacro/clash/log"
 	"github.com/Dreamacro/clash/tunnel/statistic"
 )
 
 var (
-	serverSecret = ""
+	serverSecret []byte
 	serverAddr   = ""
 
 	uiPath = ""
@@ -57,7 +58,7 @@ func Start(addr string, secret string) {
 	}
 
 	serverAddr = addr
-	serverSecret = secret
+	serverSecret = []byte(secret)
 
 	r := chi.NewRouter()
 
@@ -115,7 +116,7 @@ func Start(addr string, secret string) {
 
 func authentication(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		if serverSecret == "" {
+		if len(serverSecret) == 0 {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -123,7 +124,7 @@ func authentication(next http.Handler) http.Handler {
 		// Browser websocket not support custom header
 		if websocket.IsWebSocketUpgrade(r) && r.URL.Query().Get("token") != "" {
 			token := r.URL.Query().Get("token")
-			if token != serverSecret {
+			if subtle.ConstantTimeCompare([]byte(token), serverSecret) != 1 {
 				render.Status(r, http.StatusUnauthorized)
 				render.JSON(w, r, ErrUnauthorized)
 				return
@@ -136,7 +137,7 @@ func authentication(next http.Handler) http.Handler {
 		bearer, token, found := strings.Cut(header, " ")
 
 		hasInvalidHeader := bearer != "Bearer"
-		hasInvalidSecret := !found || token != serverSecret
+		hasInvalidSecret := !found || subtle.ConstantTimeCompare([]byte(token), serverSecret) != 1
 		if hasInvalidHeader || hasInvalidSecret {
 			render.Status(r, http.StatusUnauthorized)
 			render.JSON(w, r, ErrUnauthorized)
@@ -169,12 +170,12 @@ func traffic(w http.ResponseWriter, r *http.Request) {
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	t := statistic.DefaultManager
-	buf := &bytes.Buffer{}
+	buf := pool.BufferWriter{}
 	var err error
 	for range tick.C {
 		buf.Reset()
 		up, down := t.Now()
-		if err := json.NewEncoder(buf).Encode(Traffic{
+		if err := json.NewEncoder(&buf).Encode(Traffic{
 			Up:   up,
 			Down: down,
 		}); err != nil {
@@ -230,7 +231,7 @@ func getLogs(w http.ResponseWriter, r *http.Request) {
 	var (
 		sub    observable.Subscription[L.Event]
 		ch     = make(chan L.Event, 1024)
-		buf    = &bytes.Buffer{}
+		buf    = pool.BufferWriter{}
 		closed = false
 	)
 
@@ -273,7 +274,7 @@ func getLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		buf.Reset()
 
-		if err := json.NewEncoder(buf).Encode(Log{
+		if err := json.NewEncoder(&buf).Encode(Log{
 			Type:    logM.Type(),
 			Payload: logM.Payload,
 		}); err != nil {

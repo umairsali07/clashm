@@ -545,21 +545,30 @@ func testPacketConnTimeout(t *testing.T, pc net.PacketConn) error {
 }
 
 func testSuit(t *testing.T, proxy C.ProxyAdapter) {
+	dest := localIP
+	if proxy.Type() == C.WireGuard {
+		dest = netip.MustParseAddr("10.0.0.1")
+	}
+
 	conn, err := proxy.DialContext(context.Background(), &C.Metadata{
-		Host:    localIP.String(),
+		Host:    dest.String(),
 		DstPort: "10001",
 	})
 	require.NoError(t, err)
-	defer conn.Close()
+
 	assert.NoError(t, testPingPongWithConn(t, conn))
+	_ = conn.Close()
+	time.Sleep(waitTime)
 
 	conn, err = proxy.DialContext(context.Background(), &C.Metadata{
-		Host:    localIP.String(),
+		Host:    dest.String(),
 		DstPort: "10001",
 	})
 	require.NoError(t, err)
-	defer conn.Close()
+
 	assert.NoError(t, testLargeDataWithConn(t, conn))
+	_ = conn.Close()
+	time.Sleep(waitTime)
 
 	if !proxy.SupportUDP() {
 		return
@@ -567,33 +576,36 @@ func testSuit(t *testing.T, proxy C.ProxyAdapter) {
 
 	pc, err := proxy.ListenPacketContext(context.Background(), &C.Metadata{
 		NetWork: C.UDP,
-		DstIP:   localIP,
+		DstIP:   dest,
 		DstPort: "10001",
 	})
 	require.NoError(t, err)
-	defer pc.Close()
 
 	assert.NoError(t, testPingPongWithPacketConn(t, pc))
+	_ = pc.Close()
+	time.Sleep(waitTime)
 
 	pc, err = proxy.ListenPacketContext(context.Background(), &C.Metadata{
 		NetWork: C.UDP,
-		DstIP:   localIP,
+		DstIP:   dest,
 		DstPort: "10001",
 	})
 	require.NoError(t, err)
-	defer pc.Close()
 
 	assert.NoError(t, testLargeDataWithPacketConn(t, pc))
+	_ = pc.Close()
+	time.Sleep(waitTime)
 
 	pc, err = proxy.ListenPacketContext(context.Background(), &C.Metadata{
 		NetWork: C.UDP,
-		DstIP:   localIP,
+		DstIP:   dest,
 		DstPort: "10001",
 	})
 	require.NoError(t, err)
-	defer pc.Close()
 
 	assert.NoError(t, testPacketConnTimeout(t, pc))
+	_ = pc.Close()
+	time.Sleep(waitTime)
 }
 
 func benchmarkProxy(b *testing.B, proxy C.ProxyAdapter) {
@@ -658,11 +670,13 @@ log-level: debug
 	require.NoError(t, err)
 	defer cleanup()
 
-	require.True(t, TCPing(net.JoinHostPort(localIP.String(), "10000")))
+	require.True(t, TCPing(net.JoinHostPort("127.0.0.1", "10000")))
 	testPingPongWithSocksPort(t, 10000)
+	time.Sleep(waitTime)
 }
 
 func Benchmark_Direct(b *testing.B) {
 	proxy := outbound.NewDirect()
 	benchmarkProxy(b, proxy)
+	time.Sleep(waitTime)
 }
