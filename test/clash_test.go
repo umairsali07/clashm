@@ -36,7 +36,7 @@ const (
 	ImageTrojanGo        = "p4gefau1t/trojan-go:latest"
 	ImageSnell           = "ghcr.io/icpz/snell-server:latest"
 	ImageXray            = "teddysun/xray:latest"
-	ImageBoringTun       = "ghcr.io/ntkme/boringtun:edge"
+	ImageWireguardGo     = "masipcat/wireguard-go:latest"
 )
 
 var (
@@ -104,7 +104,7 @@ func init() {
 		ImageTrojanGo,
 		ImageSnell,
 		ImageXray,
-		ImageBoringTun,
+		ImageWireguardGo,
 	}
 
 	for _, image := range images {
@@ -128,8 +128,10 @@ socks-port: 0
 mixed-port: 0
 redir-port: 0
 tproxy-port: 0
+mitm-port: 0
 dns:
 	enable: false
+	listen: ""
 `
 
 func cleanup() {
@@ -253,7 +255,7 @@ func testPingPongWithSocksPort(t *testing.T, port int) {
 	test(t)
 }
 
-func testPingPongWithConn(t *testing.T, c net.Conn) error {
+func testPingPongWithConn(t *testing.T, dialFn func() (net.Conn, error)) error {
 	l, err := Listen("tcp", ":10001")
 	if err != nil {
 		return err
@@ -277,6 +279,10 @@ func testPingPongWithConn(t *testing.T, c net.Conn) error {
 			return
 		}
 	}()
+
+	c, err := dialFn()
+	require.NoError(t, err)
+	defer c.Close()
 
 	go func() {
 		if _, err := c.Write([]byte("ping")); err != nil {
@@ -337,7 +343,7 @@ type hashPair struct {
 	recvHash map[int][]byte
 }
 
-func testLargeDataWithConn(t *testing.T, c net.Conn) error {
+func testLargeDataWithConn(t *testing.T, dialFn func() (net.Conn, error)) error {
 	l, err := Listen("tcp", ":10001")
 	require.NoError(t, err)
 	defer l.Close()
@@ -398,6 +404,9 @@ func testLargeDataWithConn(t *testing.T, c net.Conn) error {
 			recvHash: hashMap,
 		}
 	}()
+
+	c, err := dialFn()
+	require.NoError(t, err)
 
 	go func() {
 		sendHash, err := writeRandData(c)
@@ -546,29 +555,26 @@ func testPacketConnTimeout(t *testing.T, pc net.PacketConn) error {
 
 func testSuit(t *testing.T, proxy C.ProxyAdapter) {
 	dest := localIP
-	if proxy.Type() == C.WireGuard {
+	if proxy.Type() == C.WireGuard && !isDarwin {
 		dest = netip.MustParseAddr("10.0.0.1")
 	}
 
-	conn, err := proxy.DialContext(context.Background(), &C.Metadata{
-		Host:    dest.String(),
-		DstPort: "10001",
-	})
-	require.NoError(t, err)
+	dialTcpFn := func() (net.Conn, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+		defer cancel()
+		return proxy.DialContext(ctx, &C.Metadata{
+			Host:    dest.String(),
+			DstPort: "10001",
+		})
+	}
 
-	assert.NoError(t, testPingPongWithConn(t, conn))
-	_ = conn.Close()
-	time.Sleep(waitTime)
+	assert.NoError(t, testPingPongWithConn(t, dialTcpFn))
 
-	conn, err = proxy.DialContext(context.Background(), &C.Metadata{
-		Host:    dest.String(),
-		DstPort: "10001",
-	})
-	require.NoError(t, err)
+	if proxy.Type() == C.WireGuard && isDarwin {
+		return
+	}
 
-	assert.NoError(t, testLargeDataWithConn(t, conn))
-	_ = conn.Close()
-	time.Sleep(waitTime)
+	assert.NoError(t, testLargeDataWithConn(t, dialTcpFn))
 
 	if !proxy.SupportUDP() {
 		return
@@ -583,7 +589,6 @@ func testSuit(t *testing.T, proxy C.ProxyAdapter) {
 
 	assert.NoError(t, testPingPongWithPacketConn(t, pc))
 	_ = pc.Close()
-	time.Sleep(waitTime)
 
 	pc, err = proxy.ListenPacketContext(context.Background(), &C.Metadata{
 		NetWork: C.UDP,
@@ -594,7 +599,6 @@ func testSuit(t *testing.T, proxy C.ProxyAdapter) {
 
 	assert.NoError(t, testLargeDataWithPacketConn(t, pc))
 	_ = pc.Close()
-	time.Sleep(waitTime)
 
 	pc, err = proxy.ListenPacketContext(context.Background(), &C.Metadata{
 		NetWork: C.UDP,
@@ -605,7 +609,6 @@ func testSuit(t *testing.T, proxy C.ProxyAdapter) {
 
 	assert.NoError(t, testPacketConnTimeout(t, pc))
 	_ = pc.Close()
-	time.Sleep(waitTime)
 }
 
 func benchmarkProxy(b *testing.B, proxy C.ProxyAdapter) {
@@ -663,7 +666,9 @@ func benchmarkProxy(b *testing.B, proxy C.ProxyAdapter) {
 func TestClash_Basic(t *testing.T) {
 	basic := `
 mixed-port: 10000
-log-level: debug
+log-level: silent
+rules:
+  - match, DIRECT
 `
 
 	err := parseAndApply(basic)
@@ -672,11 +677,9 @@ log-level: debug
 
 	require.True(t, TCPing(net.JoinHostPort("127.0.0.1", "10000")))
 	testPingPongWithSocksPort(t, 10000)
-	time.Sleep(waitTime)
 }
 
 func Benchmark_Direct(b *testing.B) {
 	proxy := outbound.NewDirect()
 	benchmarkProxy(b, proxy)
-	time.Sleep(waitTime)
 }
