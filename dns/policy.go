@@ -1,5 +1,7 @@
 package dns
 
+import "reflect"
+
 type Policy struct {
 	data []dnsClient
 }
@@ -9,15 +11,16 @@ func (p *Policy) GetData() []dnsClient {
 }
 
 func (p *Policy) Compare(p2 *Policy) int {
-	if p2 == nil {
-		return 1
-	}
-	l1 := len(p.data)
-	l2 := len(p2.data)
-	if l1 == l2 {
+	if p == nil && p2 == nil {
 		return 0
 	}
-	if l1 > l2 {
+	if p == nil || p2 == nil {
+		return 1
+	}
+	if reflect.DeepEqual(p.data, p2.data) {
+		return 0
+	}
+	if len(p.data) > len(p2.data) {
 		return 1
 	}
 	return -1

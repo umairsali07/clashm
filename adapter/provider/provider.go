@@ -15,6 +15,7 @@ import (
 	"github.com/Dreamacro/clash/adapter/outbound"
 	"github.com/Dreamacro/clash/common/convert"
 	"github.com/Dreamacro/clash/common/singledo"
+	"github.com/Dreamacro/clash/component/resolver"
 	C "github.com/Dreamacro/clash/constant"
 	types "github.com/Dreamacro/clash/constant/provider"
 	"github.com/Dreamacro/clash/tunnel/statistic"
@@ -108,7 +109,10 @@ func (pp *ProxySetProvider) setProxies(proxies []C.Proxy) {
 		names := lo.Map(old, func(item C.Proxy, _ int) string {
 			p := item.(C.ProxyAdapter)
 			name := p.Name()
-			go p.Cleanup()
+			go func() {
+				p.Cleanup()
+				resolver.RemoveCache(name)
+			}()
 			return name
 		})
 		statistic.DefaultManager.KickOut(names...)

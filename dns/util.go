@@ -27,18 +27,19 @@ const (
 	proxyTimeout = 10 * time.Second
 )
 
-func putMsgToCache(c *cache.LruCache[string, *D.Msg], key string, msg *D.Msg) {
+func putMsgToCache(c *cache.LruCache[string, *rMsg], key string, msg *rMsg) {
 	putMsgToCacheWithExpire(c, key, msg, 0)
 }
 
-func putMsgToCacheWithExpire(c *cache.LruCache[string, *D.Msg], key string, msg *D.Msg, ttl uint32) {
-	if ttl == 0 {
-		if ttl = minTTL(msg.Answer); ttl == 0 {
+func putMsgToCacheWithExpire(c *cache.LruCache[string, *rMsg], key string, msg *rMsg, sec uint32) {
+	if sec == 0 {
+		if sec = minTTL(msg.Msg.Answer); sec == 0 {
 			return
 		}
+		sec = max(sec, 120) // at least 2 minutes to cache
 	}
 
-	c.SetWithExpire(key, msg.Copy(), time.Now().Add(time.Duration(ttl)*time.Second))
+	c.SetWithExpire(key, msg.Copy(), time.Now().Add(time.Duration(sec)*time.Second))
 }
 
 func setMsgTTL(msg *D.Msg, ttl uint32) {
@@ -58,6 +59,11 @@ func setMsgTTLWithForce(msg *D.Msg, ttl uint32, force bool) {
 func setTTL(records []D.RR, ttl uint32, force bool) {
 	if force {
 		for i := range records {
+			if records[i].Header().Rrtype != D.TypeA &&
+				records[i].Header().Rrtype != D.TypeAAAA &&
+				records[i].Header().Ttl == 0 {
+				continue
+			}
 			records[i].Header().Ttl = ttl
 		}
 		return
@@ -65,6 +71,11 @@ func setTTL(records []D.RR, ttl uint32, force bool) {
 
 	delta := minTTL(records) - ttl
 	for i := range records {
+		if records[i].Header().Rrtype != D.TypeA &&
+			records[i].Header().Rrtype != D.TypeAAAA &&
+			records[i].Header().Ttl == 0 {
+			continue
+		}
 		records[i].Header().Ttl = min(max(records[i].Header().Ttl-delta, 1), records[i].Header().Ttl)
 	}
 }
@@ -233,15 +244,16 @@ tcp:
 	return proxy.DialContext(ctx, metadata, opts...)
 }
 
-func batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *D.Msg, err error) {
-	fast, ctx := picker.WithContext[*D.Msg](ctx)
+func batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *rMsg, err error) {
+	fast, ctx1 := picker.WithContext[*rMsg](ctx)
 	for _, clientM := range clients {
 		r := clientM
-		fast.Go(func() (*D.Msg, error) {
-			mm, fErr := r.ExchangeContext(ctx, m)
+		fast.Go(func() (*rMsg, error) {
+			mm, fErr := r.ExchangeContext(ctx1, m)
+			go logDnsResponse(m.Question[0], mm, fErr)
 			if fErr != nil {
 				return nil, fErr
-			} else if mm.Rcode == D.RcodeServerFailure || mm.Rcode == D.RcodeRefused {
+			} else if mm.Msg.Rcode == D.RcodeServerFailure || mm.Msg.Rcode == D.RcodeRefused {
 				return nil, errors.New("server failure")
 			}
 			return mm, nil
@@ -287,32 +299,28 @@ func getTCPConn(ctx context.Context, addr string) (conn net.Conn, err error) {
 	return
 }
 
-func logDnsResponse(q D.Question, msg *D.Msg, err error, network, source, proxyAdapter string) {
-	if q.Qtype != D.TypeA && q.Qtype != D.TypeAAAA {
+func logDnsResponse(q D.Question, msg *rMsg, err error) {
+	if msg == nil {
 		return
 	}
-
-	var pr string
-	if network != "" {
-		network = network + "://"
-	}
-	if proxyAdapter != "" {
-		pr = "(" + proxyAdapter + ")"
+	if q.Qtype != D.TypeA && q.Qtype != D.TypeAAAA {
+		return
 	}
 
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Debug().
 			Err(err).
-			Str("source", fmt.Sprintf("%s%s%s", network, source, pr)).
+			Str("source", msg.Source).
 			Str("qType", D.Type(q.Qtype).String()).
 			Str("name", q.Name).
 			Msg("[DNS] dns response failed")
-	} else if msg != nil {
+	} else if msg.Msg != nil {
 		log.Debug().
-			Str("source", fmt.Sprintf("%s%s%s", network, source, pr)).
+			Str("source", msg.Source).
 			Str("qType", D.Type(q.Qtype).String()).
 			Str("name", q.Name).
-			Strs("answer", msgToIPStr(msg)).
+			Strs("answer", msgToIPStr(msg.Msg)).
+			Uint32("ttl", minTTL(msg.Msg.Answer)).
 			Msg("[DNS] dns response")
 	}
 }

@@ -16,6 +16,8 @@ import (
 	"github.com/Dreamacro/clash/component/resolver"
 )
 
+var _ dnsClient = (*client)(nil)
+
 type client struct {
 	*D.Client
 	r      *Resolver
@@ -24,14 +26,14 @@ type client struct {
 	iface  string
 	proxy  string
 	ip     string
-	isDHCP bool
+	source string
 }
 
-func (c *client) Exchange(m *D.Msg) (*D.Msg, error) {
+func (c *client) Exchange(m *D.Msg) (*rMsg, error) {
 	return c.ExchangeContext(context.Background(), m)
 }
 
-func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*D.Msg, error) {
+func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*rMsg, error) {
 	var err error
 	if c.ip == "" {
 		if c.r == nil {
@@ -58,6 +60,7 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*D.Msg, error) 
 		options []dialer.Option
 		conn    net.Conn
 		proxy   = c.proxy
+		msg     = &rMsg{Source: c.source}
 	)
 
 	if p, ok := resolver.GetProxy(ctx); ok {
@@ -68,14 +71,19 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*D.Msg, error) 
 		options = append(options, dialer.WithInterface(c.iface))
 	}
 
+	subCtx, cancel := context.WithTimeout(ctx, c.Client.Timeout)
+	defer cancel()
+	ctx = subCtx
+
 	if proxy != "" {
+		msg.Source += "(" + proxy + ")"
 		conn, err = dialContextByProxyOrInterface(ctx, network, netip.MustParseAddr(c.ip), c.port, proxy, options...)
 	} else {
 		conn, err = dialer.DialContext(ctx, network, net.JoinHostPort(c.ip, c.port), options...)
 	}
 
 	if err != nil {
-		return nil, err
+		return msg, err
 	}
 
 	// miekg/dns ExchangeContext doesn't respond to context cancel.
@@ -99,25 +107,19 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*D.Msg, error) 
 			TsigProvider: c.Client.TsigProvider,
 		}
 
-		msg, _, err2 := c.Client.ExchangeWithConn(m, co)
+		msg1, _, err1 := c.Client.ExchangeWithConn(m, co)
 
-		ch <- result{msg, err2}
+		ch <- result{msg1, err1}
 
 		_ = co.Close()
 	}()
 
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return msg, ctx.Err()
 	case ret := <-ch:
-		clientNet := c.Client.Net
-		if clientNet == "tcp-tls" {
-			clientNet = "tls"
-		} else if c.isDHCP {
-			clientNet = "dhcp"
-		}
-		logDnsResponse(m.Question[0], ret.msg, ret.err, clientNet, net.JoinHostPort(c.host, c.port), proxy)
-		return ret.msg, ret.err
+		msg.Msg = ret.msg
+		return msg, ret.err
 	}
 }
 
@@ -135,6 +137,17 @@ func newClient(nw, addr, proxy, iface string, dhcp bool, r *Resolver) *client {
 		timeout = resolver.DefaultDNSTimeout
 	}
 
+	clientNet := nw
+	if dhcp {
+		clientNet = "dhcp"
+	} else if clientNet == "tcp-tls" {
+		clientNet = "tls"
+	}
+	if clientNet != "" {
+		clientNet += "://"
+	}
+	source := clientNet + addr
+
 	return &client{
 		Client: &D.Client{
 			Net: nw,
@@ -149,7 +162,7 @@ func newClient(nw, addr, proxy, iface string, dhcp bool, r *Resolver) *client {
 		ip:     ip,
 		iface:  iface,
 		proxy:  proxy,
-		isDHCP: dhcp,
+		source: source,
 		r:      r,
 	}
 }

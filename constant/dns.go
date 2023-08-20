@@ -2,7 +2,6 @@ package constant
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 )
 
@@ -34,21 +33,23 @@ func (e *DNSMode) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
-// MarshalYAML serialize EnhancedMode with yaml
-func (e DNSMode) MarshalYAML() (any, error) {
-	return e.String(), nil
-}
-
 // UnmarshalJSON unserialize EnhancedMode with json
 func (e *DNSMode) UnmarshalJSON(data []byte) error {
 	var tp string
-	json.Unmarshal(data, &tp)
+	if err := json.Unmarshal(data, &tp); err != nil {
+		return err
+	}
 	mode, exist := DNSModeMapping[tp]
 	if !exist {
-		return errors.New("invalid mode")
+		return fmt.Errorf("invalid mode: %s", tp)
 	}
 	*e = mode
 	return nil
+}
+
+// MarshalYAML serialize EnhancedMode with yaml
+func (e DNSMode) MarshalYAML() (any, error) {
+	return e.String(), nil
 }
 
 // MarshalJSON serialize EnhancedMode with json

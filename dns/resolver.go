@@ -24,13 +24,25 @@ import (
 var _ resolver.Resolver = (*Resolver)(nil)
 
 type dnsClient interface {
-	Exchange(m *D.Msg) (msg *D.Msg, err error)
-	ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error)
+	Exchange(m *D.Msg) (msg *rMsg, err error)
+	ExchangeContext(ctx context.Context, m *D.Msg) (msg *rMsg, err error)
 }
 
 type result struct {
-	Msg   *D.Msg
+	Msg   *rMsg
 	Error error
+}
+
+type rMsg struct {
+	Source string
+	Msg    *D.Msg
+}
+
+func (m *rMsg) Copy() *rMsg {
+	m1 := new(rMsg)
+	m1.Source = m.Source
+	m1.Msg = m.Msg.Copy()
+	return m1
 }
 
 type Resolver struct {
@@ -43,7 +55,7 @@ type Resolver struct {
 	fallbackDomainFilters []fallbackDomainFilter
 	fallbackIPFilters     []fallbackIPFilter
 	group                 singleflight.Group
-	lruCache              *cache.LruCache[string, *D.Msg]
+	lruCache              *cache.LruCache[string, *rMsg]
 	policy                *trie.DomainTrie[*Policy]
 	searchDomains         []string
 }
@@ -134,14 +146,14 @@ func (r *Resolver) shouldIPFallback(ip netip.Addr) bool {
 }
 
 // Exchange a batch of dns request, and it uses cache
-func (r *Resolver) Exchange(m *D.Msg) (msg *D.Msg, err error) {
+func (r *Resolver) Exchange(m *D.Msg) (msg *D.Msg, source string, err error) {
 	return r.ExchangeContext(context.Background(), m)
 }
 
 // ExchangeContext a batch of dns request with context.Context, and it uses cache
-func (r *Resolver) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
+func (r *Resolver) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, source string, err error) {
 	if len(m.Question) == 0 {
-		return nil, errors.New("should have one question at least")
+		return nil, "", errors.New("should have one question at least")
 	}
 
 	var (
@@ -152,35 +164,40 @@ func (r *Resolver) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, e
 	cacheM, expireTime, hit := r.lruCache.GetWithExpire(key)
 	if hit {
 		now := time.Now()
-		msg = cacheM.Copy()
+		msg1 := cacheM.Copy()
+		msg = msg1.Msg
+		source = msg1.Source
 		if expireTime.Before(now) {
-			setMsgTTL(msg, uint32(1)) // Continue fetch
-			go func() {
-				ctx1, cancel := context.WithTimeout(ctx, resolver.DefaultDNSTimeout)
-				_, _ = r.exchangeWithoutCache(ctx1, m, q, key)
-				cancel()
+			setMsgTTL(msg, uint32(1))
+			go func() { // Continue fetch
+				_, _ = r.exchangeWithoutCache(resolver.CopyCtxValues(ctx), m, q, key)
 			}()
 		} else {
-			setMsgMaxTTL(msg, uint32(time.Until(expireTime).Seconds()))
+			ttl := max(time.Until(expireTime).Seconds(), 1)
+			setMsgMaxTTL(msg, uint32(ttl))
 		}
 		return
 	}
-	return r.exchangeWithoutCache(ctx, m, q, key)
+	msg1, err := r.exchangeWithoutCache(ctx, m, q, key)
+	if err != nil {
+		return nil, "", err
+	}
+	return msg1.Msg, msg1.Source, nil
 }
 
 // ExchangeWithoutCache a batch of dns request, and it does NOT GET from cache
-func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Question, key string) (msg *D.Msg, err error) {
+func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Question, key string) (msg *rMsg, err error) {
 	ret, err, shared := r.group.Do(key, func() (result any, err error) {
 		defer func() {
 			if err != nil {
 				return
 			}
 
-			msg1 := result.(*D.Msg)
+			msg1 := result.(*rMsg)
 			if resolver.IsProxyServer(ctx) {
-				// reset proxy server ip cache expire time to at least 2 hours
-				ttl := max(minTTL(msg1.Answer), 7200)
-				setMsgMaxTTL(msg1, ttl)
+				// reset proxy server ip cache expire time to at least 15 minutes
+				ttl := max(minTTL(msg1.Msg.Answer), 900)
+				setMsgMaxTTL(msg1.Msg, ttl)
 				putMsgToCacheWithExpire(r.lruCache, key, msg1, ttl)
 				return
 			}
@@ -201,7 +218,7 @@ func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Quest
 	})
 
 	if err == nil {
-		msg = ret.(*D.Msg)
+		msg = ret.(*rMsg)
 		if shared {
 			msg = msg.Copy()
 		}
@@ -210,7 +227,7 @@ func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Quest
 	return
 }
 
-func (r *Resolver) batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *D.Msg, err error) {
+func (r *Resolver) batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *rMsg, err error) {
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, resolver.DefaultDNSTimeout)
@@ -234,8 +251,7 @@ func (r *Resolver) matchPolicy(domain string) []dnsClient {
 		return nil
 	}
 
-	p := record.Data
-	return p.GetData()
+	return record.Data.GetData()
 }
 
 func (r *Resolver) shouldOnlyQueryFallback(domain string) bool {
@@ -256,7 +272,7 @@ func (r *Resolver) shouldOnlyQueryFallback(domain string) bool {
 	return false
 }
 
-func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
+func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg) (msg *rMsg, err error) {
 	if resolver.IsRemote(ctx) && r.remote != nil {
 		res := <-r.asyncExchange(ctx, r.remote, m)
 		return res.Msg, res.Error
@@ -288,8 +304,10 @@ func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg) (msg *D.Msg, err er
 
 	res := <-msgCh
 	if res.Error == nil {
-		if ips := msgToIP(res.Msg); len(ips) != 0 {
-			if !r.shouldIPFallback(ips[0]) {
+		if ips := msgToIP(res.Msg.Msg); len(ips) != 0 {
+			if lo.EveryBy(ips, func(ip netip.Addr) bool {
+				return !r.shouldIPFallback(ip)
+			}) {
 				msg = res.Msg // no need to wait for fallback result
 				err = res.Error
 				return msg, err
@@ -321,7 +339,7 @@ func (r *Resolver) lookupIP(ctx context.Context, host string, dnsType uint16) ([
 	query := &D.Msg{}
 	query.SetQuestion(D.Fqdn(host), dnsType)
 
-	msg, err := r.ExchangeContext(ctx, query)
+	msg, _, err := r.ExchangeContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +354,7 @@ func (r *Resolver) lookupIP(ctx context.Context, host string, dnsType uint16) ([
 	for _, domain := range r.searchDomains {
 		q := &D.Msg{}
 		q.SetQuestion(D.Fqdn(fmt.Sprintf("%s.%s", host, domain)), dnsType)
-		msg1, err1 := r.ExchangeContext(ctx, q)
+		msg1, _, err1 := r.ExchangeContext(ctx, q)
 		if err1 != nil {
 			return nil, err1
 		}
@@ -406,18 +424,18 @@ type Config struct {
 func NewResolver(config Config) *Resolver {
 	defaultResolver := &Resolver{
 		main: transform(config.Default, nil),
-		lruCache: cache.New[string, *D.Msg](
-			cache.WithSize[string, *D.Msg](128),
-			cache.WithStale[string, *D.Msg](true),
+		lruCache: cache.New[string, *rMsg](
+			cache.WithSize[string, *rMsg](128),
+			cache.WithStale[string, *rMsg](true),
 		),
 	}
 
 	r := &Resolver{
 		ipv6: config.IPv6,
 		main: transform(config.Main, defaultResolver),
-		lruCache: cache.New[string, *D.Msg](
-			cache.WithSize[string, *D.Msg](10240),
-			cache.WithStale[string, *D.Msg](true),
+		lruCache: cache.New[string, *rMsg](
+			cache.WithSize[string, *rMsg](10240),
+			cache.WithStale[string, *rMsg](true),
 		),
 		hosts:         config.Hosts,
 		searchDomains: config.SearchDomains,

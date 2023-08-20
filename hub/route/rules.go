@@ -24,7 +24,7 @@ type Rule struct {
 func getRules(w http.ResponseWriter, r *http.Request) {
 	rawRules := tunnel.Rules()
 
-	rules := []Rule{}
+	rules := make([]Rule, 0, len(rawRules))
 	for _, rule := range rawRules {
 		rules = append(rules, Rule{
 			Type:    rule.RuleType().String(),

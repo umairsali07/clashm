@@ -59,7 +59,7 @@ type Resolver interface {
 	ResolveIP(host string) (ip netip.Addr, err error)
 	ResolveIPv4(host string) (ip netip.Addr, err error)
 	ResolveIPv6(host string) (ip netip.Addr, err error)
-	ExchangeContext(ctx context.Context, m *dns.Msg) (msg *dns.Msg, err error)
+	ExchangeContext(ctx context.Context, m *dns.Msg) (msg *dns.Msg, source string, err error)
 	RemoveCache(host string)
 }
 
@@ -149,6 +149,23 @@ func IsRemote(ctx context.Context) bool {
 func GetProxy(ctx context.Context) (string, bool) {
 	v, ok := ctx.Value(proxyKey).(string)
 	return v, ok
+}
+
+// WithProxy returns a new context with proxy name
+func WithProxy(ctx context.Context, proxy string) context.Context {
+	return context.WithValue(ctx, proxyKey, proxy)
+}
+
+// CopyCtxValues returns a new context with parent's values
+func CopyCtxValues(parent context.Context) context.Context {
+	newCtx := context.Background()
+	if v, ok := parent.Value(proxyKey).(string); ok {
+		newCtx = context.WithValue(newCtx, proxyKey, v)
+	}
+	if parent.Value(proxyServerHostKey) != nil {
+		newCtx = context.WithValue(newCtx, proxyServerHostKey, struct{}{})
+	}
+	return newCtx
 }
 
 func resolveIPByType(host string, _type uint16) (netip.Addr, error) {

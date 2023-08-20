@@ -142,7 +142,7 @@ func withFakeIP(fakePool *fakeip.Pool) middleware {
 			msg.Answer = []D.RR{rr}
 
 			ctx.SetType(context.DNSTypeFakeIP)
-			setMsgTTL(msg, 1)
+			setMsgTTL(msg, 3)
 			msg.SetRcode(r, D.RcodeSuccess)
 			msg.Authoritative = true
 			msg.RecursionAvailable = true
@@ -162,14 +162,14 @@ func withResolver(resolver *Resolver) handler {
 			return handleMsgWithEmptyAnswer(r), nil
 		}
 
-		msg, err := resolver.Exchange(r)
+		msg, _, err := resolver.Exchange(r)
 		if err != nil {
 			log.Debug().Err(err).
 				Str("name", q.Name).
 				Str("qClass", D.Class(q.Qclass).String()).
 				Str("qType", D.Type(q.Qtype).String()).
 				Msg("[DNS] exchange failed")
-			return msg, err
+			return nil, err
 		}
 		msg.SetRcode(r, msg.Rcode)
 		msg.Authoritative = true

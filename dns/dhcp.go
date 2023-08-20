@@ -20,6 +20,8 @@ const (
 	DHCPTimeout = time.Minute
 )
 
+var _ dnsClient = (*dhcpClient)(nil)
+
 type dhcpClient struct {
 	ifaceName string
 
@@ -33,14 +35,14 @@ type dhcpClient struct {
 	err       error
 }
 
-func (d *dhcpClient) Exchange(m *D.Msg) (msg *D.Msg, err error) {
+func (d *dhcpClient) Exchange(m *D.Msg) (msg *rMsg, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
 	defer cancel()
 
 	return d.ExchangeContext(ctx, m)
 }
 
-func (d *dhcpClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
+func (d *dhcpClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *rMsg, err error) {
 	clients, err := d.resolve(ctx)
 	if err != nil {
 		return nil, err

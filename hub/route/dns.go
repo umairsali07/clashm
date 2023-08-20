@@ -11,6 +11,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/samber/lo"
 
+	"github.com/Dreamacro/clash/common/util"
 	"github.com/Dreamacro/clash/component/resolver"
 )
 
@@ -27,8 +28,11 @@ func queryDNS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := r.URL.Query().Get("name")
-	qTypeStr, _ := lo.Coalesce(r.URL.Query().Get("type"), "A")
+	var (
+		name     = r.URL.Query().Get("name")
+		proxy    = r.URL.Query().Get("proxy")
+		qTypeStr = util.EmptyOr(r.URL.Query().Get("type"), "A")
+	)
 
 	qType, exist := dns.StringToType[strings.ToUpper(qTypeStr)]
 	if !exist {
@@ -40,9 +44,13 @@ func queryDNS(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
 	defer cancel()
 
+	if proxy != "" {
+		ctx = resolver.WithProxy(ctx, proxy)
+	}
+
 	msg := dns.Msg{}
 	msg.SetQuestion(dns.Fqdn(name), qType)
-	resp, err := resolver.DefaultResolver.ExchangeContext(ctx, &msg)
+	resp, source, err := resolver.DefaultResolver.ExchangeContext(ctx, &msg)
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
 		render.JSON(w, r, newError(err.Error()))
@@ -50,6 +58,7 @@ func queryDNS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseData := render.M{
+		"Server":   source,
 		"Status":   resp.Rcode,
 		"Question": resp.Question,
 		"TC":       resp.Truncated,

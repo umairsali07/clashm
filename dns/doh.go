@@ -25,6 +25,8 @@ const (
 
 type contextKey string
 
+var _ dnsClient = (*dohClient)(nil)
+
 type dohClient struct {
 	r         *Resolver
 	url       string
@@ -39,11 +41,11 @@ type dohClient struct {
 	proxyTransport map[string]*http.Transport
 }
 
-func (dc *dohClient) Exchange(m *D.Msg) (msg *D.Msg, err error) {
+func (dc *dohClient) Exchange(m *D.Msg) (msg *rMsg, err error) {
 	return dc.ExchangeContext(context.Background(), m)
 }
 
-func (dc *dohClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
+func (dc *dohClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *rMsg, err error) {
 	dc.mux.Lock()
 	if !dc.resolved {
 		host, port, _ := net.SplitHostPort(dc.addr)
@@ -63,36 +65,37 @@ func (dc *dohClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg,
 	}
 	dc.mux.Unlock()
 
+	proxy := dc.proxy
+	if p, ok := resolver.GetProxy(ctx); ok {
+		proxy = p
+	}
+
+	msg = &rMsg{Source: dc.urlLog}
+	if proxy != "" {
+		msg.Source += "(" + proxy + ")"
+		ctx = context.WithValue(ctx, proxyKey, proxy)
+	}
+
 	// https://datatracker.ietf.org/doc/html/rfc8484#section-4.1
 	// In order to maximize cache friendliness, SHOULD use a DNS ID of 0 in every DNS request.
 	newM := *m
 	newM.Id = 0
 	req, err := dc.newRequest(&newM)
 	if err != nil {
-		return nil, err
+		return msg, err
 	}
 
-	proxy := dc.proxy
-	if p, ok := resolver.GetProxy(ctx); ok {
-		proxy = p
-	}
+	subCtx, cancel := context.WithTimeout(ctx, dc.timeout)
+	defer cancel()
+	ctx = subCtx
 
-	if proxy != "" {
-		ctx = context.WithValue(ctx, proxyKey, proxy)
-	}
-
-	if _, ok := ctx.Deadline(); !ok {
-		subCtx, cancel := context.WithTimeout(ctx, dc.timeout)
-		defer cancel()
-		ctx = subCtx
-	}
-
+	var msg1 *D.Msg
 	req = req.WithContext(ctx)
-	msg, err = dc.doRequest(req, proxy)
+	msg1, err = dc.doRequest(req, proxy)
 	if err == nil {
-		msg.Id = m.Id
+		msg1.Id = m.Id
+		msg.Msg = msg1
 	}
-	logDnsResponse(m.Question[0], msg, err, "", dc.urlLog, proxy)
 	return
 }
 

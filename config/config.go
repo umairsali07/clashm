@@ -400,13 +400,9 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 			},
 			DefaultNameserver: []string{
 				"114.114.114.114",
-				"223.5.5.5",
+				"8.8.8.8",
 			},
-			NameServer: []string{ // default if user not set
-				"https://120.53.53.53/dns-query",
-				"tls://223.5.5.5:853",
-			},
-			RemoteNameserver: []string{ // default if user not set
+			RemoteNameserver: []string{
 				"tcp://1.1.1.1",
 				"tcp://8.8.8.8",
 			},
