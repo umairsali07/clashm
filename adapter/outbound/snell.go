@@ -23,14 +23,15 @@ type Snell struct {
 
 type SnellOption struct {
 	BasicOption
-	Name       string         `proxy:"name"`
-	Server     string         `proxy:"server"`
-	Port       int            `proxy:"port"`
-	Psk        string         `proxy:"psk"`
-	UDP        bool           `proxy:"udp,omitempty"`
-	Version    int            `proxy:"version,omitempty"`
-	ObfsOpts   map[string]any `proxy:"obfs-opts,omitempty"`
-	RandomHost bool           `proxy:"rand-host,omitempty"`
+	Name             string         `proxy:"name"`
+	Server           string         `proxy:"server"`
+	Port             int            `proxy:"port"`
+	Psk              string         `proxy:"psk"`
+	UDP              bool           `proxy:"udp,omitempty"`
+	Version          int            `proxy:"version,omitempty"`
+	ObfsOpts         map[string]any `proxy:"obfs-opts,omitempty"`
+	RandomHost       bool           `proxy:"rand-host,omitempty"`
+	RemoteDnsResolve bool           `proxy:"remote-dns-resolve,omitempty"`
 }
 
 type streamOption struct {
@@ -155,6 +156,7 @@ func NewSnell(option SnellOption) (*Snell, error) {
 			udp:   option.UDP,
 			iface: option.Interface,
 			rmark: option.RoutingMark,
+			dns:   option.RemoteDnsResolve,
 		},
 		psk:        psk,
 		obfsOption: obfsOption,

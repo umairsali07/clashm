@@ -116,15 +116,11 @@ func (pp *ProxySetProvider) setProxies(proxies []C.Proxy) {
 			return name
 		})
 		statistic.DefaultManager.KickOut(names...)
-		if pp.healthCheck.auto() {
-			go pp.healthCheck.checkAll()
-		}
-	} else if pp.healthCheck.auto() {
+		go pp.healthCheck.checkAll()
+	} else {
 		go func() {
 			time.Sleep(45 * time.Second)
-			if pp.healthCheck.auto() {
-				pp.healthCheck.checkAll()
-			}
+			pp.healthCheck.checkAll()
 		}()
 	}
 }
@@ -142,6 +138,7 @@ func NewProxySetProvider(
 	forceCertVerify bool,
 	udp bool,
 	randomHost bool,
+	disableDNS bool,
 	prefixName string,
 ) (*ProxySetProvider, error) {
 	filterReg, err := regexp.Compile(filter, 0)
@@ -162,7 +159,7 @@ func NewProxySetProvider(
 		name,
 		interval,
 		vehicle,
-		proxiesParseAndFilter(filter, filterReg, forceCertVerify, udp, randomHost, prefixName),
+		proxiesParseAndFilter(filter, filterReg, forceCertVerify, udp, randomHost, disableDNS, prefixName),
 		proxiesOnUpdate(pd),
 	)
 
@@ -339,7 +336,15 @@ func proxiesOnUpdate(pd *ProxySetProvider) func([]C.Proxy) {
 	}
 }
 
-func proxiesParseAndFilter(filter string, filterReg *regexp.Regexp, forceCertVerify, udp, randomHost bool, prefixName string) parser[[]C.Proxy] {
+func proxiesParseAndFilter(
+	filter string,
+	filterReg *regexp.Regexp,
+	forceCertVerify bool,
+	udp bool,
+	randomHost bool,
+	disableDNS bool,
+	prefixName string,
+) parser[[]C.Proxy] {
 	return func(buf []byte) ([]C.Proxy, error) {
 		schema := &ProxySchema{}
 
@@ -375,7 +380,7 @@ func proxiesParseAndFilter(filter string, filterReg *regexp.Regexp, forceCertVer
 				mapping["name"] = prefixName + name
 			}
 
-			proxy, err := adapter.ParseProxy(mapping, forceCertVerify, udp, true, randomHost)
+			proxy, err := adapter.ParseProxy(mapping, forceCertVerify, udp, true, randomHost, disableDNS)
 			if err != nil {
 				return nil, fmt.Errorf("proxy %s[index: %d] error: %w", name, idx, err)
 			}

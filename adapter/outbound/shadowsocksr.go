@@ -26,17 +26,18 @@ type ShadowSocksR struct {
 
 type ShadowSocksROption struct {
 	BasicOption
-	Name          string `proxy:"name"`
-	Server        string `proxy:"server"`
-	Port          int    `proxy:"port"`
-	Password      string `proxy:"password"`
-	Cipher        string `proxy:"cipher"`
-	Obfs          string `proxy:"obfs"`
-	ObfsParam     string `proxy:"obfs-param,omitempty"`
-	Protocol      string `proxy:"protocol"`
-	ProtocolParam string `proxy:"protocol-param,omitempty"`
-	UDP           bool   `proxy:"udp,omitempty"`
-	RandomHost    bool   `proxy:"rand-host,omitempty"`
+	Name             string `proxy:"name"`
+	Server           string `proxy:"server"`
+	Port             int    `proxy:"port"`
+	Password         string `proxy:"password"`
+	Cipher           string `proxy:"cipher"`
+	Obfs             string `proxy:"obfs"`
+	ObfsParam        string `proxy:"obfs-param,omitempty"`
+	Protocol         string `proxy:"protocol"`
+	ProtocolParam    string `proxy:"protocol-param,omitempty"`
+	UDP              bool   `proxy:"udp,omitempty"`
+	RandomHost       bool   `proxy:"rand-host,omitempty"`
+	RemoteDnsResolve bool   `proxy:"remote-dns-resolve,omitempty"`
 }
 
 // StreamConn implements C.ProxyAdapter
@@ -174,6 +175,7 @@ func NewShadowSocksR(option ShadowSocksROption) (*ShadowSocksR, error) {
 			udp:   option.UDP,
 			iface: option.Interface,
 			rmark: option.RoutingMark,
+			dns:   option.RemoteDnsResolve,
 		},
 		cipher:   coreCiph,
 		obfs:     obfsM,

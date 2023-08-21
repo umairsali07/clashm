@@ -34,22 +34,23 @@ type Vmess struct {
 
 type VmessOption struct {
 	BasicOption
-	Name           string       `proxy:"name"`
-	Server         string       `proxy:"server"`
-	Port           int          `proxy:"port"`
-	UUID           string       `proxy:"uuid"`
-	AlterID        int          `proxy:"alterId"`
-	Cipher         string       `proxy:"cipher"`
-	UDP            bool         `proxy:"udp,omitempty"`
-	Network        string       `proxy:"network,omitempty"`
-	TLS            bool         `proxy:"tls,omitempty"`
-	SkipCertVerify bool         `proxy:"skip-cert-verify,omitempty"`
-	ServerName     string       `proxy:"servername,omitempty"`
-	HTTPOpts       HTTPOptions  `proxy:"http-opts,omitempty"`
-	HTTP2Opts      HTTP2Options `proxy:"h2-opts,omitempty"`
-	GrpcOpts       GrpcOptions  `proxy:"grpc-opts,omitempty"`
-	WSOpts         WSOptions    `proxy:"ws-opts,omitempty"`
-	RandomHost     bool         `proxy:"rand-host,omitempty"`
+	Name             string       `proxy:"name"`
+	Server           string       `proxy:"server"`
+	Port             int          `proxy:"port"`
+	UUID             string       `proxy:"uuid"`
+	AlterID          int          `proxy:"alterId"`
+	Cipher           string       `proxy:"cipher"`
+	UDP              bool         `proxy:"udp,omitempty"`
+	Network          string       `proxy:"network,omitempty"`
+	TLS              bool         `proxy:"tls,omitempty"`
+	SkipCertVerify   bool         `proxy:"skip-cert-verify,omitempty"`
+	ServerName       string       `proxy:"servername,omitempty"`
+	HTTPOpts         HTTPOptions  `proxy:"http-opts,omitempty"`
+	HTTP2Opts        HTTP2Options `proxy:"h2-opts,omitempty"`
+	GrpcOpts         GrpcOptions  `proxy:"grpc-opts,omitempty"`
+	WSOpts           WSOptions    `proxy:"ws-opts,omitempty"`
+	RandomHost       bool         `proxy:"rand-host,omitempty"`
+	RemoteDnsResolve bool         `proxy:"remote-dns-resolve,omitempty"`
 }
 
 type HTTPOptions struct {
@@ -329,6 +330,7 @@ func NewVmess(option VmessOption) (*Vmess, error) {
 			udp:   option.UDP,
 			iface: option.Interface,
 			rmark: option.RoutingMark,
+			dns:   option.RemoteDnsResolve,
 		},
 		client: client,
 		option: &option,

@@ -26,14 +26,15 @@ type Socks5 struct {
 
 type Socks5Option struct {
 	BasicOption
-	Name           string `proxy:"name"`
-	Server         string `proxy:"server"`
-	Port           int    `proxy:"port"`
-	UserName       string `proxy:"username,omitempty"`
-	Password       string `proxy:"password,omitempty"`
-	TLS            bool   `proxy:"tls,omitempty"`
-	UDP            bool   `proxy:"udp,omitempty"`
-	SkipCertVerify bool   `proxy:"skip-cert-verify,omitempty"`
+	Name             string `proxy:"name"`
+	Server           string `proxy:"server"`
+	Port             int    `proxy:"port"`
+	UserName         string `proxy:"username,omitempty"`
+	Password         string `proxy:"password,omitempty"`
+	TLS              bool   `proxy:"tls,omitempty"`
+	UDP              bool   `proxy:"udp,omitempty"`
+	SkipCertVerify   bool   `proxy:"skip-cert-verify,omitempty"`
+	RemoteDnsResolve bool   `proxy:"remote-dns-resolve,omitempty"`
 }
 
 // StreamConn implements C.ProxyAdapter
@@ -177,6 +178,7 @@ func NewSocks5(option Socks5Option) *Socks5 {
 			udp:   option.UDP,
 			iface: option.Interface,
 			rmark: option.RoutingMark,
+			dns:   option.RemoteDnsResolve,
 		},
 		user:           option.UserName,
 		pass:           option.Password,

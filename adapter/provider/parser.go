@@ -30,6 +30,7 @@ type proxyProviderSchema struct {
 	ForceCertVerify bool                `provider:"force-cert-verify,omitempty"`
 	UDP             bool                `provider:"udp,omitempty"`
 	RandomHost      bool                `provider:"rand-host,omitempty"`
+	DisableDNS      bool                `provider:"disable-dns,omitempty"`
 	PrefixName      string              `provider:"prefix-name,omitempty"`
 	Header          map[string][]string `provider:"header,omitempty"`
 }
@@ -91,5 +92,5 @@ func ParseProxyProvider(name string, mapping map[string]any, forceCertVerify boo
 	interval := schema.Interval
 	filter := schema.Filter
 	return NewProxySetProvider(name, interval, filter, vehicle, hc, schema.ForceCertVerify,
-		schema.UDP, schema.RandomHost, schema.PrefixName)
+		schema.UDP, schema.RandomHost, schema.DisableDNS, schema.PrefixName)
 }

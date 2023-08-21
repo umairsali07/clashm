@@ -12,7 +12,7 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 )
 
-func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, randomHost bool) (C.Proxy, error) {
+func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, randomHost, disableDNS bool) (C.Proxy, error) {
 	decoder := structure.NewDecoder(structure.Option{TagName: "proxy", WeaklyTypedInput: true})
 	proxyType, existType := mapping["type"].(string)
 	if !existType {
@@ -25,7 +25,7 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 	)
 	switch proxyType {
 	case "ss":
-		ssOption := &outbound.ShadowSocksOption{}
+		ssOption := &outbound.ShadowSocksOption{RemoteDnsResolve: true}
 		err = decoder.Decode(mapping, ssOption)
 		if err != nil {
 			break
@@ -36,9 +36,12 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if randomHost {
 			ssOption.RandomHost = true
 		}
+		if disableDNS {
+			ssOption.RemoteDnsResolve = false
+		}
 		proxy, err = outbound.NewShadowSocks(*ssOption)
 	case "ssr":
-		ssrOption := &outbound.ShadowSocksROption{}
+		ssrOption := &outbound.ShadowSocksROption{RemoteDnsResolve: true}
 		err = decoder.Decode(mapping, ssrOption)
 		if err != nil {
 			break
@@ -49,9 +52,12 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if randomHost {
 			ssrOption.RandomHost = true
 		}
+		if disableDNS {
+			ssrOption.RemoteDnsResolve = false
+		}
 		proxy, err = outbound.NewShadowSocksR(*ssrOption)
 	case "socks5":
-		socksOption := &outbound.Socks5Option{}
+		socksOption := &outbound.Socks5Option{RemoteDnsResolve: true}
 		err = decoder.Decode(mapping, socksOption)
 		if err != nil {
 			break
@@ -62,15 +68,21 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if udp {
 			socksOption.UDP = true
 		}
+		if disableDNS {
+			socksOption.RemoteDnsResolve = false
+		}
 		proxy = outbound.NewSocks5(*socksOption)
 	case "http":
-		httpOption := &outbound.HttpOption{}
+		httpOption := &outbound.HttpOption{RemoteDnsResolve: true}
 		err = decoder.Decode(mapping, httpOption)
 		if err != nil {
 			break
 		}
 		if forceCertVerify {
 			httpOption.SkipCertVerify = false
+		}
+		if disableDNS {
+			httpOption.RemoteDnsResolve = false
 		}
 		proxy = outbound.NewHttp(*httpOption)
 	case "vmess":
@@ -80,6 +92,7 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 				Path:    []string{"/"},
 				Headers: make(map[string][]string),
 			},
+			RemoteDnsResolve: true,
 		}
 		err = decoder.Decode(mapping, vmessOption)
 		if err != nil {
@@ -98,6 +111,9 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if randomHost {
 			vmessOption.RandomHost = true
 		}
+		if disableDNS {
+			vmessOption.RemoteDnsResolve = false
+		}
 		proxy, err = outbound.NewVmess(*vmessOption)
 	case "vless":
 		vlessOption := &outbound.VlessOption{}
@@ -114,7 +130,7 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		log.Warn().Str("name", vlessOption.Name).Msg("[Config] proxy type VLESS is deprecated")
 		proxy, err = outbound.NewVless(*vlessOption)
 	case "snell":
-		snellOption := &outbound.SnellOption{}
+		snellOption := &outbound.SnellOption{RemoteDnsResolve: true}
 		err = decoder.Decode(mapping, snellOption)
 		if err != nil {
 			break
@@ -125,9 +141,12 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if randomHost {
 			snellOption.RandomHost = true
 		}
+		if disableDNS {
+			snellOption.RemoteDnsResolve = false
+		}
 		proxy, err = outbound.NewSnell(*snellOption)
 	case "trojan":
-		trojanOption := &outbound.TrojanOption{}
+		trojanOption := &outbound.TrojanOption{RemoteDnsResolve: true}
 		err = decoder.Decode(mapping, trojanOption)
 		if err != nil {
 			break
@@ -137,6 +156,9 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		}
 		if udp {
 			trojanOption.UDP = true
+		}
+		if disableDNS {
+			trojanOption.RemoteDnsResolve = false
 		}
 		if trojanOption.Flow != "" {
 			log.Warn().Str("proxy", trojanOption.Name).Msg("[Config] trojan xTLS is deprecated")

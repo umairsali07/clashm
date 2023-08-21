@@ -27,15 +27,16 @@ type Http struct {
 
 type HttpOption struct {
 	BasicOption
-	Name           string            `proxy:"name"`
-	Server         string            `proxy:"server"`
-	Port           int               `proxy:"port"`
-	UserName       string            `proxy:"username,omitempty"`
-	Password       string            `proxy:"password,omitempty"`
-	TLS            bool              `proxy:"tls,omitempty"`
-	SNI            string            `proxy:"sni,omitempty"`
-	SkipCertVerify bool              `proxy:"skip-cert-verify,omitempty"`
-	Headers        map[string]string `proxy:"headers,omitempty"`
+	Name             string            `proxy:"name"`
+	Server           string            `proxy:"server"`
+	Port             int               `proxy:"port"`
+	UserName         string            `proxy:"username,omitempty"`
+	Password         string            `proxy:"password,omitempty"`
+	TLS              bool              `proxy:"tls,omitempty"`
+	SNI              string            `proxy:"sni,omitempty"`
+	SkipCertVerify   bool              `proxy:"skip-cert-verify,omitempty"`
+	Headers          map[string]string `proxy:"headers,omitempty"`
+	RemoteDnsResolve bool              `proxy:"remote-dns-resolve,omitempty"`
 }
 
 // StreamConn implements C.ProxyAdapter
@@ -153,6 +154,7 @@ func NewHttp(option HttpOption) *Http {
 			tp:    C.Http,
 			iface: option.Interface,
 			rmark: option.RoutingMark,
+			dns:   option.RemoteDnsResolve,
 		},
 		user:      option.UserName,
 		pass:      option.Password,

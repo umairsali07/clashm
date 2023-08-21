@@ -1,12 +1,14 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/Dreamacro/clash/common/convert"
@@ -123,4 +125,16 @@ func NewHTTPVehicle(path string, url string, urlProxy bool, header http.Header) 
 		urlProxy: urlProxy,
 		header:   header,
 	}
+}
+
+func removeComment(buf []byte) []byte {
+	arr := regexp.MustCompile(`(.*#.*\n)`).FindAllSubmatch(buf, -1)
+	for _, subs := range arr {
+		sub := subs[0]
+		if !bytes.HasPrefix(bytes.TrimLeft(sub, " 	"), []byte("#")) {
+			continue
+		}
+		buf = bytes.Replace(buf, sub, []byte(""), 1)
+	}
+	return buf
 }

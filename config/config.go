@@ -591,7 +591,7 @@ func parseProxies(cfg *RawConfig) (proxiesMap map[string]C.Proxy, pdsMap map[str
 
 	// parse proxy
 	for idx, mapping := range proxiesConfig {
-		proxy, err := adapter.ParseProxy(mapping, forceCertVerify, false, false, false)
+		proxy, err := adapter.ParseProxy(mapping, forceCertVerify, false, false, false, false)
 		if err != nil {
 			return nil, nil, fmt.Errorf("proxy %d: %w", idx, err)
 		}

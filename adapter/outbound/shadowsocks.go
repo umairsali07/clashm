@@ -28,15 +28,16 @@ type ShadowSocks struct {
 
 type ShadowSocksOption struct {
 	BasicOption
-	Name       string         `proxy:"name"`
-	Server     string         `proxy:"server"`
-	Port       int            `proxy:"port"`
-	Password   string         `proxy:"password"`
-	Cipher     string         `proxy:"cipher"`
-	UDP        bool           `proxy:"udp,omitempty"`
-	Plugin     string         `proxy:"plugin,omitempty"`
-	PluginOpts map[string]any `proxy:"plugin-opts,omitempty"`
-	RandomHost bool           `proxy:"rand-host,omitempty"`
+	Name             string         `proxy:"name"`
+	Server           string         `proxy:"server"`
+	Port             int            `proxy:"port"`
+	Password         string         `proxy:"password"`
+	Cipher           string         `proxy:"cipher"`
+	UDP              bool           `proxy:"udp,omitempty"`
+	Plugin           string         `proxy:"plugin,omitempty"`
+	PluginOpts       map[string]any `proxy:"plugin-opts,omitempty"`
+	RandomHost       bool           `proxy:"rand-host,omitempty"`
+	RemoteDnsResolve bool           `proxy:"remote-dns-resolve,omitempty"`
 }
 
 type simpleObfsOption struct {
@@ -179,6 +180,7 @@ func NewShadowSocks(option ShadowSocksOption) (*ShadowSocks, error) {
 			udp:   option.UDP,
 			iface: option.Interface,
 			rmark: option.RoutingMark,
+			dns:   option.RemoteDnsResolve,
 		},
 		cipher: ciph,
 

@@ -19,6 +19,7 @@ type Base struct {
 	iface string
 	tp    C.AdapterType
 	udp   bool
+	dns   bool
 	rmark int
 }
 
@@ -54,7 +55,7 @@ func (b *Base) SupportUDP() bool {
 
 // DisableDnsResolve implements C.DisableDnsResolve
 func (b *Base) DisableDnsResolve() bool {
-	return false
+	return !b.dns
 }
 
 // MarshalJSON implements C.ProxyAdapter

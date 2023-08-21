@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"os"
 	"path/filepath"
-	"regexp"
 	"time"
 
 	"github.com/phuslu/log"
@@ -17,8 +16,6 @@ import (
 var (
 	fileMode os.FileMode = 0o666
 	dirMode  os.FileMode = 0o755
-
-	commentRegx = regexp.MustCompile(`(.*#.*\n)`)
 )
 
 type parser[V any] func([]byte) (V, error)
@@ -186,18 +183,6 @@ func safeWrite(path string, buf []byte) error {
 	}
 
 	return os.WriteFile(path, buf, fileMode)
-}
-
-func removeComment(buf []byte) []byte {
-	arr := commentRegx.FindAllSubmatch(buf, -1)
-	for _, subs := range arr {
-		sub := subs[0]
-		if !bytes.HasPrefix(bytes.TrimLeft(sub, " 	"), []byte("#")) {
-			continue
-		}
-		buf = bytes.Replace(buf, sub, []byte(""), 1)
-	}
-	return buf
 }
 
 func newFetcher[V any](name string, interval time.Duration, vehicle types.Vehicle, parser parser[V], onUpdate func(V)) *fetcher[V] {
