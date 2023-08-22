@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -14,14 +15,22 @@ import (
 )
 
 func TestClash_Listener(t *testing.T) {
+	end := 8893
 	basic := `
 log-level: silent
-port: 7890
-socks-port: 7891
-redir-port: 7892
-tproxy-port: 7893
-mixed-port: 7894
+port: 8890
+socks-port: 8891
+mixed-port: 8892
+mitm-port: 8893
 `
+
+	if runtime.GOOS == "linux" {
+		end = 8895
+		basic += `
+redir-port: 8894
+tproxy-port: 8895
+`
+	}
 
 	err := parseAndApply(basic)
 	require.NoError(t, err)
@@ -29,7 +38,7 @@ mixed-port: 7894
 
 	time.Sleep(waitTime)
 
-	for i := 7890; i <= 7894; i++ {
+	for i := 8890; i <= end; i++ {
 		require.True(t, TCPing(net.JoinHostPort("127.0.0.1", strconv.Itoa(i))), "tcp port %d", i)
 	}
 }
@@ -47,32 +56,32 @@ log-level: silent
 	udpIn := tunnel.UDPIn()
 
 	ports := listener.Ports{
-		Port: 7890,
+		Port: 8890,
 	}
 	listener.ReCreatePortsListeners(ports, tcpIn, udpIn)
-	require.True(t, TCPing("127.0.0.1:7890"))
+	require.True(t, TCPing("127.0.0.1:8890"))
 	require.Equal(t, ports, *listener.GetPorts())
 
 	inbounds := []C.Inbound{
 		{
 			Type:        C.InboundTypeHTTP,
-			BindAddress: "127.0.0.1:7891",
+			BindAddress: "127.0.0.1:8891",
 		},
 	}
 	listener.ReCreateListeners(inbounds, tcpIn, udpIn)
-	require.True(t, TCPing("127.0.0.1:7890"))
+	require.True(t, TCPing("127.0.0.1:8890"))
 	require.Equal(t, ports, *listener.GetPorts())
 
-	require.True(t, TCPing("127.0.0.1:7891"))
+	require.True(t, TCPing("127.0.0.1:8891"))
 	require.Equal(t, len(inbounds), len(listener.GetInbounds()))
 
 	ports.Port = 0
-	ports.SocksPort = 7892
+	ports.SocksPort = 8892
 	listener.ReCreatePortsListeners(ports, tcpIn, udpIn)
-	require.False(t, TCPing("127.0.0.1:7890"))
-	require.True(t, TCPing("127.0.0.1:7892"))
+	require.False(t, TCPing("127.0.0.1:8890"))
+	require.True(t, TCPing("127.0.0.1:8892"))
 	require.Equal(t, ports, *listener.GetPorts())
 
-	require.True(t, TCPing("127.0.0.1:7891"))
+	require.True(t, TCPing("127.0.0.1:8891"))
 	require.Equal(t, len(inbounds), len(listener.GetInbounds()))
 }

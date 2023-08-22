@@ -9,13 +9,14 @@ import (
 
 func TestClash_RuleInbound(t *testing.T) {
 	basic := `
-socks-port: 7890
+socks-port: 8890
 inbounds:
-  - socks://127.0.0.1:7891
+  - socks://127.0.0.1:8891
   - type: socks
-    bind-address: 127.0.0.1:7892
+    bind-address: 127.0.0.1:8892
 rules:
-  - INBOUND-PORT,7891,REJECT
+  - INBOUND-PORT,8891,REJECT
+  - MATCH,DIRECT
 log-level: silent
 `
 
@@ -23,11 +24,11 @@ log-level: silent
 	require.NoError(t, err)
 	defer cleanup()
 
-	require.True(t, TCPing(net.JoinHostPort("127.0.0.1", "7890")))
-	require.True(t, TCPing(net.JoinHostPort("127.0.0.1", "7891")))
-	require.True(t, TCPing(net.JoinHostPort("127.0.0.1", "7892")))
+	require.True(t, TCPing(net.JoinHostPort("127.0.0.1", "8890")))
+	require.True(t, TCPing(net.JoinHostPort("127.0.0.1", "8891")))
+	require.True(t, TCPing(net.JoinHostPort("127.0.0.1", "8892")))
 
-	require.Error(t, testPingPongWithSocksPort(t, 7891))
-	require.NoError(t, testPingPongWithSocksPort(t, 7890))
-	require.NoError(t, testPingPongWithSocksPort(t, 7892))
+	require.Error(t, testPingPongWithSocksPort(t, 8891))
+	require.NoError(t, testPingPongWithSocksPort(t, 8890))
+	require.NoError(t, testPingPongWithSocksPort(t, 8892))
 }

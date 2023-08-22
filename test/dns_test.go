@@ -28,7 +28,7 @@ dns:
   enable: true
   listen: 0.0.0.0:8553
   nameserver:
-    - 119.29.29.29
+    - https://dns.alidns.com/dns-query
 `
 
 	err := parseAndApply(basic)
@@ -66,7 +66,7 @@ dns:
   fake-ip-filter:
     - .sslip.io
   nameserver:
-    - 119.29.29.29
+    - https://dns.alidns.com/dns-query
 `
 
 	err := parseAndApply(basic)

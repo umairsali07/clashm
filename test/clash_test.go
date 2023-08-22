@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -307,12 +308,16 @@ func testPingPongWithConn(t *testing.T, dialFn func() (net.Conn, error)) error {
 	return test(t)
 }
 
-func testPingPongWithPacketConn(t *testing.T, pc net.PacketConn) error {
-	l, err := ListenPacket("udp", ":10001")
+func testPingPongWithPacketConn(t *testing.T, pc net.PacketConn, port int) error {
+	l, err := ListenPacket("udp", fmt.Sprintf(":%d", port))
+	if errors.Is(err, syscall.EADDRINUSE) {
+		t.Logf("skip udp test by error: %s", err)
+		return nil
+	}
 	require.NoError(t, err)
 	defer l.Close()
 
-	rAddr := &net.UDPAddr{IP: localIP.AsSlice(), Port: 10001}
+	rAddr := &net.UDPAddr{IP: localIP.AsSlice(), Port: port}
 
 	pingCh, pongCh, test := newPingPongPair()
 	go func() {
@@ -445,12 +450,16 @@ func testLargeDataWithConn(t *testing.T, dialFn func() (net.Conn, error)) error 
 	return test(t)
 }
 
-func testLargeDataWithPacketConn(t *testing.T, pc net.PacketConn) error {
-	l, err := ListenPacket("udp", ":10001")
+func testLargeDataWithPacketConn(t *testing.T, pc net.PacketConn, port int) error {
+	l, err := ListenPacket("udp", fmt.Sprintf(":%d", port))
+	if errors.Is(err, syscall.EADDRINUSE) {
+		t.Logf("skip udp test by error: %s", err)
+		return nil
+	}
 	require.NoError(t, err)
 	defer l.Close()
 
-	rAddr := &net.UDPAddr{IP: localIP.AsSlice(), Port: 10001}
+	rAddr := &net.UDPAddr{IP: localIP.AsSlice(), Port: port}
 
 	times := 50
 	chunkSize := int64(1024)
@@ -587,30 +596,33 @@ func testSuit(t *testing.T, proxy C.ProxyAdapter) {
 		return
 	}
 
+	udpPort := 10010
 	pc, err := proxy.ListenPacketContext(context.Background(), &C.Metadata{
 		NetWork: C.UDP,
 		DstIP:   dest,
-		DstPort: 10001,
+		DstPort: C.Port(udpPort),
 	})
 	require.NoError(t, err)
 
-	assert.NoError(t, testPingPongWithPacketConn(t, pc))
+	assert.NoError(t, testPingPongWithPacketConn(t, pc, udpPort))
 	_ = pc.Close()
 
+	udpPort++
 	pc, err = proxy.ListenPacketContext(context.Background(), &C.Metadata{
 		NetWork: C.UDP,
 		DstIP:   dest,
-		DstPort: 10001,
+		DstPort: C.Port(udpPort),
 	})
 	require.NoError(t, err)
 
-	assert.NoError(t, testLargeDataWithPacketConn(t, pc))
+	assert.NoError(t, testLargeDataWithPacketConn(t, pc, udpPort))
 	_ = pc.Close()
 
+	udpPort++
 	pc, err = proxy.ListenPacketContext(context.Background(), &C.Metadata{
 		NetWork: C.UDP,
 		DstIP:   dest,
-		DstPort: 10001,
+		DstPort: C.Port(udpPort),
 	})
 	require.NoError(t, err)
 
