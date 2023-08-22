@@ -6,13 +6,8 @@ import (
 	"github.com/gofrs/uuid/v5"
 )
 
-const (
-	XRO = "xtls-rprx-origin"
-	XRD = "xtls-rprx-direct"
-	XRS = "xtls-rprx-splice"
-
-	Version byte = 0 // protocol version. preview version is 0
-)
+// Version of vmess
+const Version byte = 0
 
 // Command types
 const (
@@ -37,9 +32,7 @@ type DstAddr struct {
 
 // Client is vless connection generator
 type Client struct {
-	uuid     *uuid.UUID
-	Addons   *Addons
-	XTLSShow bool
+	uuid *uuid.UUID
 }
 
 // StreamConn return a Conn with net.Conn and DstAddr
@@ -48,15 +41,13 @@ func (c *Client) StreamConn(conn net.Conn, dst *DstAddr) (net.Conn, error) {
 }
 
 // NewClient return Client instance
-func NewClient(uuidStr string, addons *Addons, xtlsShow bool) (*Client, error) {
+func NewClient(uuidStr string) (*Client, error) {
 	uid, err := uuid.FromString(uuidStr)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
-		uuid:     &uid,
-		Addons:   addons,
-		XTLSShow: xtlsShow,
+		uuid: &uid,
 	}, nil
 }

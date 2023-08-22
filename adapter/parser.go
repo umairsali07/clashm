@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/phuslu/log"
-
 	"github.com/Dreamacro/clash/adapter/outbound"
 	"github.com/Dreamacro/clash/common/structure"
 	"github.com/Dreamacro/clash/common/util"
@@ -116,18 +114,28 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		}
 		proxy, err = outbound.NewVmess(*vmessOption)
 	case "vless":
-		vlessOption := &outbound.VlessOption{}
+		vlessOption := &outbound.VlessOption{
+			HTTPOpts: outbound.HTTPOptions{
+				Method:  "GET",
+				Path:    []string{"/"},
+				Headers: make(map[string][]string),
+			},
+			RemoteDnsResolve: true,
+		}
 		err = decoder.Decode(mapping, vlessOption)
 		if err != nil {
 			break
 		}
+		vlessOption.HTTPOpts.Method = util.EmptyOr(strings.ToUpper(vlessOption.HTTPOpts.Method), "GET")
 		if forceCertVerify {
 			vlessOption.SkipCertVerify = false
 		}
 		if udp {
 			vlessOption.UDP = true
 		}
-		log.Warn().Str("name", vlessOption.Name).Msg("[Config] proxy type VLESS is deprecated")
+		if disableDNS {
+			vlessOption.RemoteDnsResolve = false
+		}
 		proxy, err = outbound.NewVless(*vlessOption)
 	case "snell":
 		snellOption := &outbound.SnellOption{RemoteDnsResolve: true}
@@ -159,9 +167,6 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		}
 		if disableDNS {
 			trojanOption.RemoteDnsResolve = false
-		}
-		if trojanOption.Flow != "" {
-			log.Warn().Str("proxy", trojanOption.Name).Msg("[Config] trojan xTLS is deprecated")
 		}
 		proxy, err = outbound.NewTrojan(*trojanOption)
 	case "wireguard":

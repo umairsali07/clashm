@@ -16,7 +16,7 @@ replace github.com/Dreamacro/clash => ../
 
 require (
 	github.com/Microsoft/go-winio v0.6.1 // indirect
-	github.com/antonmedv/expr v1.12.7 // indirect
+	github.com/antonmedv/expr v1.14.0 // indirect
 	github.com/cilium/ebpf v0.11.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.10.0 // indirect
@@ -42,7 +42,6 @@ require (
 	github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 // indirect
 	github.com/vishvananda/netlink v1.2.1-beta.2.0.20230728152629-dbf1bd04f9af // indirect
 	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae // indirect
-	github.com/xtls/go v0.0.0-20220914232946-0441cf4cf837 // indirect
 	go.etcd.io/bbolt v1.3.7 // indirect
 	go.starlark.net v0.0.0-20230731234521-9b46791399bf // indirect
 	go.uber.org/atomic v1.11.0 // indirect

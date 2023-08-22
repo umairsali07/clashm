@@ -13,13 +13,11 @@ import (
 )
 
 func TestClash_VlessTLS(t *testing.T) {
-	if !t.Skipped() {
-		t.Skip("vless is deprecated, skip test")
-		return
-	}
 	cfg := &container.Config{
-		Image:        ImageXray,
+		Image:        ImageVmess,
 		ExposedPorts: defaultExposedPorts,
+		Entrypoint:   []string{"/usr/bin/v2ray"},
+		Cmd:          []string{"run", "-c", "/etc/v2ray/config.json"},
 	}
 	hostCfg := &container.HostConfig{
 		PortBindings: defaultPortBindings,
@@ -33,7 +31,7 @@ func TestClash_VlessTLS(t *testing.T) {
 	id, err := startContainer(cfg, hostCfg, "vless-tls")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		cleanContainer(id)
+		_ = cleanContainer(id)
 	})
 
 	proxy, err := outbound.NewVless(outbound.VlessOption{
@@ -41,6 +39,7 @@ func TestClash_VlessTLS(t *testing.T) {
 		Server:         localIP.String(),
 		Port:           10002,
 		UUID:           "b831381d-6324-4d53-ad4f-8cda48b30811",
+		TLS:            true,
 		SkipCertVerify: true,
 		ServerName:     "example.org",
 		UDP:            true,
@@ -51,55 +50,12 @@ func TestClash_VlessTLS(t *testing.T) {
 	testSuit(t, proxy)
 }
 
-func TestClash_VlessXTLS(t *testing.T) {
-	if !t.Skipped() {
-		t.Skip("vless is deprecated, skip test")
-		return
-	}
+func TestClash_VlessWSS(t *testing.T) {
 	cfg := &container.Config{
-		Image:        ImageXray,
+		Image:        ImageVmess,
 		ExposedPorts: defaultExposedPorts,
-	}
-	hostCfg := &container.HostConfig{
-		PortBindings: defaultPortBindings,
-		Binds: []string{
-			fmt.Sprintf("%s:/etc/xray/config.json", C.Path.Resolve("vless-xtls.json")),
-			fmt.Sprintf("%s:/etc/ssl/v2ray/fullchain.pem", C.Path.Resolve("example.org.pem")),
-			fmt.Sprintf("%s:/etc/ssl/v2ray/privkey.pem", C.Path.Resolve("example.org-key.pem")),
-		},
-	}
-
-	id, err := startContainer(cfg, hostCfg, "vless-xtls")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		cleanContainer(id)
-	})
-
-	proxy, err := outbound.NewVless(outbound.VlessOption{
-		Name:           "vless",
-		Server:         localIP.String(),
-		Port:           10002,
-		UUID:           "b831381d-6324-4d53-ad4f-8cda48b30811",
-		SkipCertVerify: true,
-		ServerName:     "example.org",
-		UDP:            true,
-		Flow:           "xtls-rprx-direct",
-		FlowShow:       true,
-	})
-	require.NoError(t, err)
-
-	time.Sleep(waitTime)
-	testSuit(t, proxy)
-}
-
-func TestClash_VlessWS(t *testing.T) {
-	if !t.Skipped() {
-		t.Skip("vless is deprecated, skip test")
-		return
-	}
-	cfg := &container.Config{
-		Image:        ImageXray,
-		ExposedPorts: defaultExposedPorts,
+		Entrypoint:   []string{"/usr/bin/v2ray"},
+		Cmd:          []string{"run", "-c", "/etc/v2ray/config.json"},
 	}
 	hostCfg := &container.HostConfig{
 		PortBindings: defaultPortBindings,
@@ -113,7 +69,7 @@ func TestClash_VlessWS(t *testing.T) {
 	id, err := startContainer(cfg, hostCfg, "vless-ws")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		cleanContainer(id)
+		_ = cleanContainer(id)
 	})
 
 	proxy, err := outbound.NewVless(outbound.VlessOption{
@@ -121,10 +77,47 @@ func TestClash_VlessWS(t *testing.T) {
 		Server:         localIP.String(),
 		Port:           10002,
 		UUID:           "b831381d-6324-4d53-ad4f-8cda48b30811",
+		TLS:            true,
 		SkipCertVerify: true,
 		ServerName:     "example.org",
 		Network:        "ws",
 		UDP:            true,
+	})
+	require.NoError(t, err)
+
+	time.Sleep(waitTime)
+	testSuit(t, proxy)
+}
+
+func TestClash_VlessWebsocketXray0RTT(t *testing.T) {
+	cfg := &container.Config{
+		Image:        ImageXray,
+		ExposedPorts: defaultExposedPorts,
+	}
+	hostCfg := &container.HostConfig{
+		PortBindings: defaultPortBindings,
+		Binds: []string{
+			fmt.Sprintf("%s:/etc/xray/config.json", C.Path.Resolve("vless-ws-0rtt.json")),
+		},
+	}
+
+	id, err := startContainer(cfg, hostCfg, "vless-xray-ws-0rtt")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = cleanContainer(id)
+	})
+
+	proxy, err := outbound.NewVless(outbound.VlessOption{
+		Name:       "vless",
+		Server:     localIP.String(),
+		Port:       10002,
+		UUID:       "b831381d-6324-4d53-ad4f-8cda48b30811",
+		Network:    "ws",
+		UDP:        true,
+		ServerName: "example.org",
+		WSOpts: outbound.WSOptions{
+			Path: "/?ed=2048",
+		},
 	})
 	require.NoError(t, err)
 
