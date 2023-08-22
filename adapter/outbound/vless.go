@@ -3,15 +3,19 @@ package outbound
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"golang.org/x/net/http2"
 
 	"github.com/Dreamacro/clash/common/convert"
+	"github.com/Dreamacro/clash/common/pool"
 	"github.com/Dreamacro/clash/component/dialer"
 	"github.com/Dreamacro/clash/component/resolver"
 	C "github.com/Dreamacro/clash/constant"
@@ -19,6 +23,11 @@ import (
 	"github.com/Dreamacro/clash/transport/socks5"
 	"github.com/Dreamacro/clash/transport/vless"
 	"github.com/Dreamacro/clash/transport/vmess"
+)
+
+const (
+	// max packet length
+	maxLength = 1024 << 3
 )
 
 type Vless struct {
@@ -306,26 +315,94 @@ func parseVlessAddr(metadata *C.Metadata) *vless.DstAddr {
 
 type vlessPacketConn struct {
 	net.Conn
-	rAddr net.Addr
+	rAddr  net.Addr
+	remain int
+	mux    sync.Mutex
 }
 
-func (uc *vlessPacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
-	realAddr := uc.rAddr.(*net.UDPAddr)
+func (vc *vlessPacketConn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	realAddr := vc.rAddr.(*net.UDPAddr)
 	destAddr := addr.(*net.UDPAddr)
 	if !realAddr.IP.Equal(destAddr.IP) || realAddr.Port != destAddr.Port {
 		return 0, errors.New("udp packet dropped due to mismatched remote address")
 	}
-	return uc.Conn.Write(b)
+
+	total := len(b)
+	if total == 0 {
+		return 0, nil
+	}
+	if total <= maxLength {
+		return writePacket(vc.Conn, b)
+	}
+
+	offset := 0
+	for {
+		cursor := min(offset+maxLength, total)
+
+		n, err := writePacket(vc.Conn, b[offset:cursor])
+		if err != nil {
+			return offset + n, err
+		}
+
+		offset = cursor
+		if offset == total {
+			break
+		}
+	}
+
+	return total, nil
 }
 
-func (uc *vlessPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
-	n, err := uc.Conn.Read(b)
-	return n, uc.rAddr, err
+func (vc *vlessPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	vc.mux.Lock()
+	defer vc.mux.Unlock()
+
+	if vc.remain > 0 {
+		length := min(len(b), vc.remain)
+
+		n, err := vc.Conn.Read(b[:length])
+		if err != nil {
+			return n, vc.rAddr, err
+		}
+
+		vc.remain -= n
+
+		return n, vc.rAddr, nil
+	}
+
+	if n, err := io.ReadFull(vc.Conn, b[:2]); err != nil {
+		return n, vc.rAddr, fmt.Errorf("read length error: %w", err)
+	}
+
+	total := int(binary.BigEndian.Uint16(b[:2]))
+	if total == 0 {
+		return 0, vc.rAddr, io.EOF
+	}
+
+	length := min(len(b), total)
+
+	if n, err := io.ReadFull(vc.Conn, b[:length]); err != nil {
+		return n, vc.rAddr, fmt.Errorf("read packet error: %w", err)
+	}
+
+	vc.remain = total - length
+
+	return length, vc.rAddr, nil
+}
+
+func writePacket(w io.Writer, b []byte) (int, error) {
+	buf := pool.BufferWriter{}
+	buf.PutUint16be(uint16(len(b)))
+	if n, err := w.Write(buf.Bytes()); err != nil {
+		return n, err
+	}
+
+	return w.Write(b)
 }
 
 func NewVless(option VlessOption) (*Vless, error) {
 	if option.Network != "ws" && !option.TLS {
-		return nil, fmt.Errorf("TLS must be true with tcp/http/h2/grpc network")
+		return nil, errors.New("TLS must be true with tcp/http/h2/grpc network")
 	}
 
 	client, err := vless.NewClient(option.UUID)
