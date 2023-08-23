@@ -159,7 +159,10 @@ func (f *fetcher[V]) pullLoop(immediately bool) {
 	}
 
 	if immediately {
-		update()
+		go func() {
+			time.Sleep(time.Second * 50)
+			update()
+		}()
 	}
 
 	for {
