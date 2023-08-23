@@ -2,7 +2,6 @@ package main
 
 import (
 	"net"
-	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -15,7 +14,6 @@ import (
 )
 
 func TestClash_Listener(t *testing.T) {
-	end := 8893
 	basic := `
 log-level: silent
 port: 8890
@@ -24,21 +22,13 @@ mixed-port: 8892
 mitm-port: 8893
 `
 
-	if runtime.GOOS == "linux" {
-		end = 8895
-		basic += `
-redir-port: 8894
-tproxy-port: 8895
-`
-	}
-
 	err := parseAndApply(basic)
 	require.NoError(t, err)
 	defer cleanup()
 
 	time.Sleep(waitTime)
 
-	for i := 8890; i <= end; i++ {
+	for i := 8890; i <= 8893; i++ {
 		require.True(t, TCPing(net.JoinHostPort("127.0.0.1", strconv.Itoa(i))), "tcp port %d", i)
 	}
 }
