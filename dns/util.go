@@ -34,8 +34,11 @@ func putMsgToCache(c *cache.LruCache[string, *rMsg], key string, msg *rMsg) {
 func putMsgToCacheWithExpire(c *cache.LruCache[string, *rMsg], key string, msg *rMsg, sec uint32) {
 	if sec == 0 {
 		if sec = minTTL(msg.Msg.Answer); sec == 0 {
-			return
+			if sec = minTTL(msg.Msg.Ns); sec == 0 {
+				sec = minTTL(msg.Msg.Extra)
+			}
 		}
+
 		sec = max(sec, 120) // at least 2 minutes to cache
 	}
 
