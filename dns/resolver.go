@@ -10,6 +10,7 @@ import (
 	"time"
 
 	D "github.com/miekg/dns"
+	"github.com/phuslu/log"
 	"github.com/samber/lo"
 	"golang.org/x/sync/singleflight"
 
@@ -194,12 +195,31 @@ func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Quest
 			}
 
 			msg1 := result.(*rMsg)
-			if resolver.IsProxyServer(ctx) {
-				// reset proxy server ip cache expire time to at least 15 minutes
-				ttl := max(minTTL(msg1.Msg.Answer), 900)
-				setMsgMaxTTL(msg1.Msg, ttl)
-				putMsgToCacheWithExpire(r.lruCache, key, msg1, ttl)
+
+			// OPT RRs MUST NOT be cached, forwarded, or stored in or loaded from master files.
+			msg1.Msg.Extra = lo.Filter(msg1.Msg.Extra, func(rr D.RR, index int) bool {
+				return rr.Header().Rrtype != D.TypeOPT
+			})
+
+			// skip dns cache for acme challenge
+			if q.Qtype == D.TypeTXT && strings.HasPrefix(q.Name, "_acme-challenge.") {
+				log.Debug().
+					Str("source", msg1.Source).
+					Str("qType", D.Type(q.Qtype).String()).
+					Str("name", q.Name).
+					Msg("[DNS] dns cache ignored because of acme challenge")
 				return
+			}
+
+			if resolver.IsProxyServer(ctx) {
+				// reset proxy server ip cache expire time to at least 20 minutes
+				sec := max(minTTL(msg1.Msg.Answer), 1200)
+				putMsgToCacheWithExpire(r.lruCache, key, msg1, sec)
+				return
+			}
+
+			if msg1.Msg.Rcode == D.RcodeNameError { // Non-Existent Domain
+				setTTL(msg1.Msg.Ns, 600, true)
 			}
 
 			putMsgToCache(r.lruCache, key, msg1)

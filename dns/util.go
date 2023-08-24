@@ -38,8 +38,10 @@ func putMsgToCacheWithExpire(c *cache.LruCache[string, *rMsg], key string, msg *
 				sec = minTTL(msg.Msg.Extra)
 			}
 		}
-
-		sec = max(sec, 120) // at least 2 minutes to cache
+		if sec == 0 {
+			return
+		}
+		sec = max(sec, 300) // at least 5 minutes to cache
 	}
 
 	c.SetWithExpire(key, msg.Copy(), time.Now().Add(time.Duration(sec)*time.Second))
