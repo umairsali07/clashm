@@ -27,7 +27,7 @@ import (
 
 const (
 	// max packet length
-	maxLength = 1024 << 3
+	maxLength = 1024 << 4
 )
 
 type Vless struct {
@@ -375,8 +375,8 @@ func (vc *vlessPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
 	}
 
 	total := int(binary.BigEndian.Uint16(b[:2]))
-	if total == 0 {
-		return 0, vc.rAddr, io.EOF
+	if total == 0 || total > maxLength {
+		return 0, vc.rAddr, fmt.Errorf("invalid packet length: %d", total)
 	}
 
 	length := min(len(b), total)
@@ -391,13 +391,13 @@ func (vc *vlessPacketConn) ReadFrom(b []byte) (int, net.Addr, error) {
 }
 
 func writePacket(w io.Writer, b []byte) (int, error) {
-	buf := pool.BufferWriter{}
-	buf.PutUint16be(uint16(len(b)))
-	if n, err := w.Write(buf.Bytes()); err != nil {
-		return n, err
-	}
+	buf := pool.GetBufferWriter()
+	defer pool.PutBufferWriter(buf)
 
-	return w.Write(b)
+	buf.PutUint16be(uint16(len(b)))
+	buf.PutSlice(b)
+
+	return w.Write(buf.Bytes())
 }
 
 func NewVless(option VlessOption) (*Vless, error) {
