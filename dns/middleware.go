@@ -41,13 +41,13 @@ func withHosts(hosts *trie.DomainTrie[netip.Addr], mapping *cache.LruCache[netip
 
 			if ip.Is4() && q.Qtype == D.TypeA {
 				rr := &D.A{}
-				rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: D.TypeA, Class: D.ClassINET, Ttl: 10}
+				rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: D.TypeA, Class: D.ClassINET, Ttl: 3}
 				rr.A = ip.AsSlice()
 
 				msg.Answer = []D.RR{rr}
 			} else if ip.Is6() && q.Qtype == D.TypeAAAA {
 				rr := &D.AAAA{}
-				rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: D.TypeAAAA, Class: D.ClassINET, Ttl: 10}
+				rr.Hdr = D.RR_Header{Name: q.Name, Rrtype: D.TypeAAAA, Class: D.ClassINET, Ttl: 3}
 				rr.AAAA = ip.AsSlice()
 
 				msg.Answer = []D.RR{rr}
@@ -56,7 +56,7 @@ func withHosts(hosts *trie.DomainTrie[netip.Addr], mapping *cache.LruCache[netip
 			}
 
 			if mapping != nil {
-				mapping.SetWithExpire(ip, host, time.Now().Add(time.Second*10))
+				mapping.SetWithExpire(ip, host, time.Now().Add(time.Second*3))
 			}
 
 			ctx.SetType(context.DNSTypeHost)

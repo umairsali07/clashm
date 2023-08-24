@@ -22,21 +22,22 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 )
 
-var _ resolver.Resolver = (*Resolver)(nil)
-
 type dnsClient interface {
 	Exchange(m *D.Msg) (msg *rMsg, err error)
 	ExchangeContext(ctx context.Context, m *D.Msg) (msg *rMsg, err error)
+	IsLan() bool
 }
 
 type result struct {
-	Msg   *rMsg
-	Error error
+	Msg    *rMsg
+	Error  error
+	Policy bool
 }
 
 type rMsg struct {
 	Source string
 	Msg    *D.Msg
+	Lan    bool
 }
 
 func (m *rMsg) Copy() *rMsg {
@@ -45,6 +46,8 @@ func (m *rMsg) Copy() *rMsg {
 	m1.Msg = m.Msg.Copy()
 	return m1
 }
+
+var _ resolver.Resolver = (*Resolver)(nil)
 
 type Resolver struct {
 	ipv6                  bool
@@ -188,13 +191,14 @@ func (r *Resolver) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, s
 
 // ExchangeWithoutCache a batch of dns request, and it does NOT GET from cache
 func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Question, key string) (msg *rMsg, err error) {
-	ret, err, shared := r.group.Do(key, func() (result any, err error) {
+	domain := strings.TrimRight(q.Name, ".")
+	ret, err, shared := r.group.Do(key, func() (res any, err error) {
 		defer func() {
 			if err != nil {
 				return
 			}
 
-			msg1 := result.(*rMsg)
+			msg1 := res.(*rMsg)
 
 			// OPT RRs MUST NOT be cached, forwarded, or stored in or loaded from master files.
 			msg1.Msg.Extra = lo.Filter(msg1.Msg.Extra, func(rr D.RR, index int) bool {
@@ -227,14 +231,18 @@ func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Quest
 
 		isIPReq := isIPRequest(q)
 		if isIPReq {
-			return r.ipExchange(ctx, m)
+			return r.ipExchange(ctx, m, domain)
 		}
 
-		name := strings.TrimRight(q.Name, ".")
-		if matched := r.matchPolicy(name); len(matched) != 0 {
-			return r.batchExchange(ctx, matched, m)
+		var rst *result
+		if r.remote != nil && resolver.IsRemote(ctx) {
+			rst = r.exchangePolicyCombine(ctx, r.remote, m, domain)
+		} else if r.proxyServer != nil && resolver.IsProxyServer(ctx) {
+			rst = r.exchangePolicyCombine(ctx, r.proxyServer, m, domain)
+		} else {
+			rst = r.exchangePolicyCombine(ctx, r.main, m, domain)
 		}
-		return r.batchExchange(ctx, r.main, m)
+		return rst.Msg, rst.Error
 	})
 
 	if err == nil {
@@ -249,29 +257,74 @@ func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Quest
 
 func (r *Resolver) batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *rMsg, err error) {
 	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, resolver.DefaultDNSTimeout)
+		var (
+			cancel  context.CancelFunc
+			timeout = resolver.DefaultDNSTimeout
+		)
+		if resolver.IsRemote(ctx) {
+			timeout = proxyTimeout
+		}
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 
 	return batchExchange(ctx, clients, m)
 }
 
-func (r *Resolver) matchPolicy(domain string) []dnsClient {
-	if r.policy == nil {
-		return nil
-	}
-
-	if domain == "" {
-		return nil
+func (r *Resolver) matchPolicy(domain string) ([]dnsClient, bool) {
+	if r.policy == nil || domain == "" {
+		return nil, false
 	}
 
 	record := r.policy.Search(domain)
 	if record == nil {
-		return nil
+		return nil, false
 	}
 
-	return record.Data.GetData()
+	return record.Data.GetData(), true
+}
+
+func (r *Resolver) asyncExchangePolicyCombine(ctx context.Context, c []dnsClient, m *D.Msg, d string) <-chan *result {
+	ch := make(chan *result, 1)
+	go func() {
+		ch <- r.exchangePolicyCombine(ctx, c, m, d)
+	}()
+	return ch
+}
+
+func (r *Resolver) exchangePolicyCombine(ctx context.Context, client []dnsClient, m *D.Msg, domain string) *result {
+	res := new(result)
+	policyClient, match := r.matchPolicy(domain)
+	if !match {
+		res.Msg, res.Error = r.batchExchange(ctx, client, m)
+		return res
+	}
+
+	isLan := lo.SomeBy(policyClient, func(c dnsClient) bool {
+		return c.IsLan()
+	})
+
+	if !isLan {
+		res.Msg, res.Error = r.batchExchange(ctx, policyClient, m)
+		res.Policy = true
+		return res
+	}
+
+	ctx1, cancel := context.WithCancel(resolver.CopyCtxValues(ctx))
+	defer cancel()
+
+	select {
+	case res = <-r.asyncExchange(ctx1, policyClient, m):
+	case res = <-r.asyncExchange(ctx1, client, m):
+	}
+
+	if res.Error == nil {
+		setMsgMaxTTL(res.Msg.Msg, 60) // reset maximum ttl to 1 minute for lan policy
+	}
+
+	res.Policy = true
+	res.Msg.Lan = true
+	return res
 }
 
 func (r *Resolver) shouldOnlyQueryFallback(domain string) bool {
@@ -292,52 +345,45 @@ func (r *Resolver) shouldOnlyQueryFallback(domain string) bool {
 	return false
 }
 
-func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg) (msg *rMsg, err error) {
-	if resolver.IsRemote(ctx) && r.remote != nil {
-		res := <-r.asyncExchange(ctx, r.remote, m)
+func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg, domain string) (msg *rMsg, err error) {
+	if r.remote != nil && resolver.IsRemote(ctx) {
+		res := r.exchangePolicyCombine(ctx, r.remote, m, domain)
 		return res.Msg, res.Error
 	}
 
-	domain := r.msgToDomain(m)
-	if matched := r.matchPolicy(domain); len(matched) != 0 {
-		res := <-r.asyncExchange(ctx, matched, m)
-		return res.Msg, res.Error
-	}
-
-	if resolver.IsProxyServer(ctx) && r.proxyServer != nil {
-		res := <-r.asyncExchange(ctx, r.proxyServer, m)
+	if r.proxyServer != nil && resolver.IsProxyServer(ctx) {
+		res := r.exchangePolicyCombine(ctx, r.proxyServer, m, domain)
 		return res.Msg, res.Error
 	}
 
 	if r.shouldOnlyQueryFallback(domain) {
-		res := <-r.asyncExchange(ctx, r.fallback, m)
+		res := r.exchangePolicyCombine(ctx, r.fallback, m, domain)
 		return res.Msg, res.Error
 	}
 
-	msgCh := r.asyncExchange(ctx, r.main, m)
+	res := r.exchangePolicyCombine(ctx, r.main, m, domain)
+	msg, err = res.Msg, res.Error
 
-	if r.fallback == nil { // directly return if no fallback servers are available
-		res := <-msgCh
-		msg, err = res.Msg, res.Error
+	if res.Policy { // directly return if from policy servers
 		return
 	}
 
-	res := <-msgCh
-	if res.Error == nil {
-		if ips := msgToIP(res.Msg.Msg); len(ips) != 0 {
+	if r.fallback == nil { // directly return if no fallback servers are available
+		return
+	}
+
+	if err == nil {
+		if ips := msgToIP(msg.Msg); len(ips) != 0 {
 			if lo.EveryBy(ips, func(ip netip.Addr) bool {
 				return !r.shouldIPFallback(ip)
 			}) {
-				msg = res.Msg // no need to wait for fallback result
-				err = res.Error
-				return msg, err
+				// no need to wait for fallback result
+				return
 			}
 		}
 	}
 
-	res = <-r.asyncExchange(ctx, r.fallback, m)
-	msg, err = res.Msg, res.Error
-	return
+	return r.batchExchange(resolver.CopyCtxValues(ctx), r.fallback, m)
 }
 
 func (r *Resolver) lookupIP(ctx context.Context, host string, dnsType uint16) ([]netip.Addr, error) {

@@ -35,6 +35,10 @@ type dhcpClient struct {
 	err       error
 }
 
+func (d *dhcpClient) IsLan() bool {
+	return false
+}
+
 func (d *dhcpClient) Exchange(m *D.Msg) (msg *rMsg, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
 	defer cancel()

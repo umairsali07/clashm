@@ -1069,36 +1069,45 @@ func parseDNS(rawCfg *RawConfig, hosts *trie.DomainTrie[netip.Addr]) (*DNS, erro
 			"localhost.sec.qq.com",
 		}
 
+		// add all nameserver host to fake ip skip host filter
+		defaultFakeIPFilter = append(defaultFakeIPFilter,
+			lo.Filter(
+				lo.Map(
+					append(dnsCfg.NameServer,
+						append(dnsCfg.Fallback,
+							append(dnsCfg.ProxyServerNameserver, dnsCfg.RemoteNameserver...)...)...),
+					func(ns dns.NameServer, _ int) string {
+						h, _, _ := net.SplitHostPort(ns.Addr)
+						if _, err := netip.ParseAddr(h); err != nil {
+							return h
+						}
+						return ""
+					}),
+				func(s string, _ int) bool {
+					return s != ""
+				},
+			)...,
+		)
+
+		// add policy to fake ip skip host filter
+		if len(dnsCfg.NameServerPolicy) != 0 {
+			for key, policy := range dnsCfg.NameServerPolicy {
+				h, _, _ := net.SplitHostPort(policy.Addr)
+
+				if a, err := netip.ParseAddr(h); err != nil {
+					defaultFakeIPFilter = append(defaultFakeIPFilter, h)
+				} else if a.IsLoopback() || a.IsPrivate() {
+					defaultFakeIPFilter = append(defaultFakeIPFilter, key)
+				}
+			}
+		}
+
 		host := trie.New[bool]()
 
 		// fake ip skip host filter
-		if len(cfg.FakeIPFilter) != 0 {
-			for _, domain := range cfg.FakeIPFilter {
-				_ = host.Insert(domain, true)
-			}
-		}
-
-		for _, domain := range defaultFakeIPFilter {
+		fakeIPFilter := lo.Uniq(append(cfg.FakeIPFilter, defaultFakeIPFilter...))
+		for _, domain := range fakeIPFilter {
 			_ = host.Insert(domain, true)
-		}
-
-		if len(dnsCfg.Fallback) != 0 {
-			for _, fb := range dnsCfg.Fallback {
-				if net.ParseIP(fb.Addr) != nil {
-					continue
-				}
-				_ = host.Insert(fb.Addr, true)
-			}
-		}
-
-		if len(dnsCfg.NameServerPolicy) != 0 {
-			keys := lo.Keys(dnsCfg.NameServerPolicy)
-			for _, policy := range keys {
-				if net.ParseIP(policy) != nil {
-					continue
-				}
-				_ = host.Insert(policy, true)
-			}
 		}
 
 		resolver.StoreFakePoolState()

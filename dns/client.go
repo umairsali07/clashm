@@ -26,7 +26,12 @@ type client struct {
 	iface  string
 	proxy  string
 	ip     string
+	lan    bool
 	source string
+}
+
+func (c *client) IsLan() bool {
+	return c.lan
 }
 
 func (c *client) Exchange(m *D.Msg) (*rMsg, error) {
@@ -48,6 +53,7 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*rMsg, error) {
 			}
 			ip := ips[rand.Intn(len(ips))]
 			c.ip = ip.String()
+			c.lan = ip.IsLoopback() || ip.IsPrivate()
 		}
 	}
 
@@ -63,7 +69,7 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*rMsg, error) {
 		msg     = &rMsg{Source: c.source}
 	)
 
-	if p, ok := resolver.GetProxy(ctx); ok {
+	if p, ok := resolver.GetProxy(ctx); ok && !c.lan {
 		proxy = p
 	}
 
@@ -125,9 +131,13 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*rMsg, error) {
 
 func newClient(nw, addr, proxy, iface string, dhcp bool, r *Resolver) *client {
 	host, port, _ := net.SplitHostPort(addr)
-	var ip string
-	if _, err := netip.ParseAddr(host); err == nil {
+	var (
+		ip  string
+		lan bool
+	)
+	if a, err := netip.ParseAddr(host); err == nil {
 		ip = host
+		lan = a.IsLoopback() || a.IsPrivate()
 	}
 
 	var timeout time.Duration
@@ -163,6 +173,7 @@ func newClient(nw, addr, proxy, iface string, dhcp bool, r *Resolver) *client {
 		iface:  iface,
 		proxy:  proxy,
 		source: source,
+		lan:    lan,
 		r:      r,
 	}
 }

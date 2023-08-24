@@ -41,6 +41,10 @@ type dohClient struct {
 	proxyTransport map[string]*http.Transport
 }
 
+func (dc *dohClient) IsLan() bool {
+	return false
+}
+
 func (dc *dohClient) Exchange(m *D.Msg) (msg *rMsg, err error) {
 	return dc.ExchangeContext(context.Background(), m)
 }

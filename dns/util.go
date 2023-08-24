@@ -41,7 +41,9 @@ func putMsgToCacheWithExpire(c *cache.LruCache[string, *rMsg], key string, msg *
 		if sec == 0 {
 			return
 		}
-		sec = max(sec, 300) // at least 5 minutes to cache
+		if !msg.Lan {
+			sec = max(sec, 300) // at least 5 minutes to cache
+		}
 	}
 
 	c.SetWithExpire(key, msg.Copy(), time.Now().Add(time.Duration(sec)*time.Second))
@@ -250,9 +252,10 @@ tcp:
 }
 
 func batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *rMsg, err error) {
+	cs := clients
 	fast, ctx1 := picker.WithContext[*rMsg](ctx)
-	for _, clientM := range clients {
-		r := clientM
+	for i, _ := range cs {
+		r := cs[i]
 		fast.Go(func() (*rMsg, error) {
 			mm, fErr := r.ExchangeContext(ctx1, m)
 			go logDnsResponse(m.Question[0], mm, fErr)
