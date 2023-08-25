@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -32,6 +33,7 @@ func queryDNS(w http.ResponseWriter, r *http.Request) {
 		name     = r.URL.Query().Get("name")
 		proxy    = r.URL.Query().Get("proxy")
 		qTypeStr = util.EmptyOr(r.URL.Query().Get("type"), "A")
+		cacheStr = util.EmptyOr(r.URL.Query().Get("cache"), "1")
 	)
 
 	qType, exist := dns.StringToType[strings.ToUpper(qTypeStr)]
@@ -41,6 +43,20 @@ func queryDNS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var (
+		resp   *dns.Msg
+		source string
+		msg    = dns.Msg{}
+		cache  = true
+	)
+
+	c, err := strconv.ParseBool(cacheStr)
+	if err == nil {
+		cache = c
+	}
+
+	msg.SetQuestion(dns.Fqdn(name), qType)
+
 	ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
 	defer cancel()
 
@@ -48,9 +64,11 @@ func queryDNS(w http.ResponseWriter, r *http.Request) {
 		ctx = resolver.WithProxy(ctx, proxy)
 	}
 
-	msg := dns.Msg{}
-	msg.SetQuestion(dns.Fqdn(name), qType)
-	resp, source, err := resolver.DefaultResolver.ExchangeContext(ctx, &msg)
+	if cache {
+		resp, source, err = resolver.DefaultResolver.ExchangeContext(ctx, &msg)
+	} else {
+		resp, source, err = resolver.DefaultResolver.ExchangeContextWithoutCache(ctx, &msg)
+	}
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
 		render.JSON(w, r, newError(err.Error()))
@@ -59,6 +77,7 @@ func queryDNS(w http.ResponseWriter, r *http.Request) {
 
 	responseData := render.M{
 		"Server":   source,
+		"Cache":    cache,
 		"Status":   resp.Rcode,
 		"Question": resp.Question,
 		"TC":       resp.Truncated,

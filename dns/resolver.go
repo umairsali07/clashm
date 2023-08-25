@@ -35,15 +35,16 @@ type result struct {
 }
 
 type rMsg struct {
-	Source string
 	Msg    *D.Msg
+	Source string
 	Lan    bool
 }
 
 func (m *rMsg) Copy() *rMsg {
 	m1 := new(rMsg)
-	m1.Source = m.Source
 	m1.Msg = m.Msg.Copy()
+	m1.Source = m.Source
+	m1.Lan = m.Lan
 	return m1
 }
 
@@ -174,7 +175,7 @@ func (r *Resolver) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, s
 		if expireTime.Before(now) {
 			setMsgTTL(msg, uint32(1))
 			go func() { // Continue fetch
-				_, _ = r.exchangeWithoutCache(resolver.CopyCtxValues(ctx), m, q, key)
+				_, _ = r.exchangeWithoutCache(resolver.CopyCtxValues(ctx), m, q, key, true)
 			}()
 		} else {
 			ttl := max(time.Until(expireTime).Seconds(), 1)
@@ -182,19 +183,37 @@ func (r *Resolver) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, s
 		}
 		return
 	}
-	msg1, err := r.exchangeWithoutCache(ctx, m, q, key)
+	msg1, err := r.exchangeWithoutCache(ctx, m, q, key, true)
 	if err != nil {
 		return nil, "", err
 	}
 	return msg1.Msg, msg1.Source, nil
 }
 
-// ExchangeWithoutCache a batch of dns request, and it does NOT GET from cache
-func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Question, key string) (msg *rMsg, err error) {
+// ExchangeContextWithoutCache a batch of dns request with context.Context
+func (r *Resolver) ExchangeContextWithoutCache(ctx context.Context, m *D.Msg) (msg *D.Msg, source string, err error) {
+	if len(m.Question) == 0 {
+		return nil, "", errors.New("should have one question at least")
+	}
+
+	var (
+		q   = m.Question[0]
+		key = genMsgCacheKey(ctx, q)
+	)
+
+	msg1, err := r.exchangeWithoutCache(ctx, m, q, key, false)
+	if err != nil {
+		return nil, "", err
+	}
+	return msg1.Msg, msg1.Source, nil
+}
+
+// exchangeWithoutCache a batch of dns request, and it does NOT GET from cache
+func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Question, key string, cache bool) (msg *rMsg, err error) {
 	domain := strings.TrimRight(q.Name, ".")
 	ret, err, shared := r.group.Do(key, func() (res any, err error) {
 		defer func() {
-			if err != nil {
+			if err != nil || !cache {
 				return
 			}
 
@@ -284,28 +303,20 @@ func (r *Resolver) matchPolicy(domain string) ([]dnsClient, bool) {
 	return record.Data.GetData(), true
 }
 
-func (r *Resolver) asyncExchangePolicyCombine(ctx context.Context, c []dnsClient, m *D.Msg, d string) <-chan *result {
-	ch := make(chan *result, 1)
-	go func() {
-		ch <- r.exchangePolicyCombine(ctx, c, m, d)
-	}()
-	return ch
-}
-
-func (r *Resolver) exchangePolicyCombine(ctx context.Context, client []dnsClient, m *D.Msg, domain string) *result {
+func (r *Resolver) exchangePolicyCombine(ctx context.Context, clients []dnsClient, m *D.Msg, domain string) *result {
 	res := new(result)
-	policyClient, match := r.matchPolicy(domain)
+	policyClients, match := r.matchPolicy(domain)
 	if !match {
-		res.Msg, res.Error = r.batchExchange(ctx, client, m)
+		res.Msg, res.Error = r.batchExchange(ctx, clients, m)
 		return res
 	}
 
-	isLan := lo.SomeBy(policyClient, func(c dnsClient) bool {
+	isLan := lo.SomeBy(policyClients, func(c dnsClient) bool {
 		return c.IsLan()
 	})
 
 	if !isLan {
-		res.Msg, res.Error = r.batchExchange(ctx, policyClient, m)
+		res.Msg, res.Error = r.batchExchange(ctx, policyClients, m)
 		res.Policy = true
 		return res
 	}
@@ -314,16 +325,15 @@ func (r *Resolver) exchangePolicyCombine(ctx context.Context, client []dnsClient
 	defer cancel()
 
 	select {
-	case res = <-r.asyncExchange(ctx1, policyClient, m):
-	case res = <-r.asyncExchange(ctx1, client, m):
+	case res = <-r.asyncExchange(ctx1, policyClients, m):
+		res.Policy = true
+	case res = <-r.asyncExchange(ctx1, clients, m):
 	}
 
 	if res.Error == nil {
+		res.Msg.Lan = true
 		setMsgMaxTTL(res.Msg.Msg, 60) // reset maximum ttl to 1 minute for lan policy
 	}
-
-	res.Policy = true
-	res.Msg.Lan = true
 	return res
 }
 
@@ -372,7 +382,9 @@ func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg, domain string) (msg
 		return
 	}
 
+	isLan := false
 	if err == nil {
+		isLan = msg.Lan
 		if ips := msgToIP(msg.Msg); len(ips) != 0 {
 			if lo.EveryBy(ips, func(ip netip.Addr) bool {
 				return !r.shouldIPFallback(ip)
@@ -383,7 +395,11 @@ func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg, domain string) (msg
 		}
 	}
 
-	return r.batchExchange(resolver.CopyCtxValues(ctx), r.fallback, m)
+	msg, err = r.batchExchange(resolver.CopyCtxValues(ctx), r.fallback, m)
+	if err == nil && isLan {
+		setMsgMaxTTL(msg.Msg, 60) // reset maximum ttl to 1 minute for lan policy
+	}
+	return
 }
 
 func (r *Resolver) lookupIP(ctx context.Context, host string, dnsType uint16) ([]netip.Addr, error) {
@@ -431,14 +447,6 @@ func (r *Resolver) lookupIP(ctx context.Context, host string, dnsType uint16) ([
 	}
 
 	return nil, resolver.ErrIPNotFound
-}
-
-func (r *Resolver) msgToDomain(msg *D.Msg) string {
-	if len(msg.Question) > 0 {
-		return strings.TrimRight(msg.Question[0].Name, ".")
-	}
-
-	return ""
 }
 
 func (r *Resolver) asyncExchange(ctx context.Context, client []dnsClient, msg *D.Msg) <-chan *result {

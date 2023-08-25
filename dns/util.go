@@ -254,7 +254,7 @@ tcp:
 func batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *rMsg, err error) {
 	cs := clients
 	fast, ctx1 := picker.WithContext[*rMsg](ctx)
-	for i, _ := range cs {
+	for i := range cs {
 		r := cs[i]
 		fast.Go(func() (*rMsg, error) {
 			mm, fErr := r.ExchangeContext(ctx1, m)

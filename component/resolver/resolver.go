@@ -60,6 +60,7 @@ type Resolver interface {
 	ResolveIPv4(host string) (ip netip.Addr, err error)
 	ResolveIPv6(host string) (ip netip.Addr, err error)
 	ExchangeContext(ctx context.Context, m *dns.Msg) (msg *dns.Msg, source string, err error)
+	ExchangeContextWithoutCache(ctx context.Context, m *dns.Msg) (msg *dns.Msg, source string, err error)
 	RemoveCache(host string)
 }
 
