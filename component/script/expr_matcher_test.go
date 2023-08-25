@@ -48,7 +48,7 @@ func TestStringInString(t *testing.T) {
 func TestNow(t *testing.T) {
 	hour := time.Now().Hour()
 	weekday := time.Now().Weekday()
-	code := fmt.Sprintf(`now.hour == %d && now.weekday == %d && now().Hour() == %d`, hour, weekday, hour)
+	code := fmt.Sprintf(`now.hour == %d && now.weekday == %d`, hour, weekday)
 	m, err := NewExprMatcher("test", code)
 	assert.NoError(t, err)
 

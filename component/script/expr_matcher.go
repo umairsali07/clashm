@@ -2,7 +2,6 @@ package script
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/antonmedv/expr"
 	"github.com/antonmedv/expr/vm"
@@ -10,11 +9,9 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 )
 
-var (
-	_ C.Matcher = (*ExprMatcher)(nil)
+var inStringPatch = &stringInString{}
 
-	inStringPatch = &stringInString{}
-)
+var _ C.Matcher = (*ExprMatcher)(nil)
 
 type ExprMatcher struct {
 	name    string
@@ -48,11 +45,8 @@ func NewExprMatcher(name, code string) (*ExprMatcher, error) {
 	options := []expr.Option{
 		expr.Env(shortcutEnvironment{}),
 		expr.Patch(inStringPatch),
+		expr.DisableBuiltin("now"),
 		expr.AsBool(),
-	}
-
-	if strings.Contains(code, " | ") {
-		options = append(options, expr.ExperimentalPipes())
 	}
 
 	program, err := expr.Compile(code, options...)
