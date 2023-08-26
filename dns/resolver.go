@@ -7,11 +7,13 @@ import (
 	"math/rand"
 	"net/netip"
 	"strings"
+	"sync"
 	"time"
 
 	D "github.com/miekg/dns"
 	"github.com/phuslu/log"
 	"github.com/samber/lo"
+	"go.uber.org/atomic"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/Dreamacro/clash/common/cache"
@@ -274,22 +276,6 @@ func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg, q D.Quest
 	return
 }
 
-func (r *Resolver) batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *rMsg, err error) {
-	if _, ok := ctx.Deadline(); !ok {
-		var (
-			cancel  context.CancelFunc
-			timeout = resolver.DefaultDNSTimeout
-		)
-		if resolver.IsRemote(ctx) {
-			timeout = proxyTimeout
-		}
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-
-	return batchExchange(ctx, clients, m)
-}
-
 func (r *Resolver) matchPolicy(domain string) ([]dnsClient, bool) {
 	if r.policy == nil || domain == "" {
 		return nil, false
@@ -304,10 +290,17 @@ func (r *Resolver) matchPolicy(domain string) ([]dnsClient, bool) {
 }
 
 func (r *Resolver) exchangePolicyCombine(ctx context.Context, clients []dnsClient, m *D.Msg, domain string) *result {
+	timeout := resolver.DefaultDNSTimeout
+	if resolver.IsRemote(ctx) {
+		timeout = proxyTimeout
+	}
+
 	res := new(result)
 	policyClients, match := r.matchPolicy(domain)
 	if !match {
-		res.Msg, res.Error = r.batchExchange(ctx, clients, m)
+		ctx1, cancel := context.WithTimeout(resolver.CopyCtxValues(ctx), timeout)
+		defer cancel()
+		res.Msg, res.Error = batchExchange(ctx1, clients, m)
 		return res
 	}
 
@@ -316,33 +309,70 @@ func (r *Resolver) exchangePolicyCombine(ctx context.Context, clients []dnsClien
 	})
 
 	if !isLan {
-		res.Msg, res.Error = r.batchExchange(ctx, policyClients, m)
+		ctx1, cancel := context.WithTimeout(resolver.CopyCtxValues(ctx), timeout)
+		defer cancel()
+		res.Msg, res.Error = batchExchange(ctx1, policyClients, m)
 		res.Policy = true
 		return res
 	}
 
-	ctx1, cancel := context.WithCancel(resolver.CopyCtxValues(ctx))
-	defer cancel()
+	var (
+		res1, res2 *result
+		done1      = atomic.NewBool(false)
+		wg         = sync.WaitGroup{}
+	)
 
-	select {
-	case res = <-r.asyncExchange(ctx1, policyClients, m):
-		res.Policy = true
-	case res = <-r.asyncExchange(ctx1, clients, m):
+	wg.Add(2)
+
+	ctx1, cancel1 := context.WithTimeout(resolver.CopyCtxValues(ctx), timeout)
+	defer cancel1()
+
+	ctx2, cancel2 := context.WithTimeout(resolver.CopyCtxValues(ctx), timeout)
+	defer cancel2()
+
+	go func() {
+		msg, err := batchExchange(ctx1, policyClients, m)
+		res1 = &result{Msg: msg, Error: err, Policy: true}
+		done1.Store(true)
+		wg.Done()
+		if err == nil {
+			cancel2() // no need to wait for others
+		}
+	}()
+
+	go func() {
+		msg, err := batchExchange(ctx2, clients, m)
+		res2 = &result{Msg: msg, Error: err}
+		wg.Done()
+		if err == nil && !done1.Load() {
+			// if others done before lan policy, then wait maximum 50ms for lan policy
+			for i := 0; i < 10; i++ {
+				time.Sleep(5 * time.Millisecond)
+				if done1.Load() { // check for every 5ms
+					return
+				}
+			}
+			cancel1()
+		}
+	}()
+
+	wg.Wait()
+
+	if res1.Error == nil {
+		res = res1
+	} else {
+		res = res2
 	}
 
 	if res.Error == nil {
 		res.Msg.Lan = true
-		setMsgMaxTTL(res.Msg.Msg, 60) // reset maximum ttl to 1 minute for lan policy
+		setMsgMaxTTL(res.Msg.Msg, 10) // reset ttl to maximum 10 seconds for lan policy
 	}
 	return res
 }
 
 func (r *Resolver) shouldOnlyQueryFallback(domain string) bool {
-	if r.fallback == nil || r.fallbackDomainFilters == nil {
-		return false
-	}
-
-	if domain == "" {
+	if r.fallback == nil || r.fallbackDomainFilters == nil || domain == "" {
 		return false
 	}
 
@@ -382,9 +412,7 @@ func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg, domain string) (msg
 		return
 	}
 
-	isLan := false
 	if err == nil {
-		isLan = msg.Lan
 		if ips := msgToIP(msg.Msg); len(ips) != 0 {
 			if lo.EveryBy(ips, func(ip netip.Addr) bool {
 				return !r.shouldIPFallback(ip)
@@ -395,10 +423,8 @@ func (r *Resolver) ipExchange(ctx context.Context, m *D.Msg, domain string) (msg
 		}
 	}
 
-	msg, err = r.batchExchange(resolver.CopyCtxValues(ctx), r.fallback, m)
-	if err == nil && isLan {
-		setMsgMaxTTL(msg.Msg, 60) // reset maximum ttl to 1 minute for lan policy
-	}
+	res = r.exchangePolicyCombine(ctx, r.fallback, m, domain)
+	msg, err = res.Msg, res.Error
 	return
 }
 
@@ -447,15 +473,6 @@ func (r *Resolver) lookupIP(ctx context.Context, host string, dnsType uint16) ([
 	}
 
 	return nil, resolver.ErrIPNotFound
-}
-
-func (r *Resolver) asyncExchange(ctx context.Context, client []dnsClient, msg *D.Msg) <-chan *result {
-	ch := make(chan *result, 1)
-	go func() {
-		res, err := r.batchExchange(ctx, client, msg)
-		ch <- &result{Msg: res, Error: err}
-	}()
-	return ch
 }
 
 func (r *Resolver) RemoveCache(host string) {

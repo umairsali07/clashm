@@ -252,12 +252,21 @@ tcp:
 }
 
 func batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *rMsg, err error) {
-	cs := clients
-	fast, ctx1 := picker.WithContext[*rMsg](ctx)
+	var (
+		fast *picker.Picker[*rMsg]
+		cs   = clients
+	)
+
+	if _, ok := ctx.Deadline(); ok {
+		fast, ctx = picker.WithContext[*rMsg](ctx)
+	} else {
+		fast, ctx = picker.WithTimeout[*rMsg](ctx, resolver.DefaultDNSTimeout)
+	}
+
 	for i := range cs {
 		r := cs[i]
 		fast.Go(func() (*rMsg, error) {
-			mm, fErr := r.ExchangeContext(ctx1, m)
+			mm, fErr := r.ExchangeContext(ctx, m)
 			go logDnsResponse(m.Question[0], mm, fErr)
 			if fErr != nil {
 				return nil, fErr

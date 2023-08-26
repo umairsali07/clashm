@@ -33,7 +33,6 @@ type dohClient struct {
 	addr      string
 	proxy     string
 	urlLog    string
-	timeout   time.Duration
 	transport *http.Transport
 
 	mux            sync.Mutex // guards following fields
@@ -89,10 +88,6 @@ func (dc *dohClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *rMsg, 
 		return msg, err
 	}
 
-	subCtx, cancel := context.WithTimeout(ctx, dc.timeout)
-	defer cancel()
-	ctx = subCtx
-
 	var msg1 *D.Msg
 	req = req.WithContext(ctx)
 	msg1, err = dc.doRequest(req, proxy)
@@ -145,8 +140,9 @@ func (dc *dohClient) getTransport(proxy string) *http.Transport {
 	}
 
 	dc.mux.Lock()
+	defer dc.mux.Unlock()
+
 	if transport, ok := dc.proxyTransport[proxy]; ok {
-		dc.mux.Unlock()
 		return transport
 	}
 
@@ -154,14 +150,11 @@ func (dc *dohClient) getTransport(proxy string) *http.Transport {
 		ForceAttemptHTTP2:   dc.transport.ForceAttemptHTTP2,
 		DialContext:         dc.transport.DialContext,
 		TLSClientConfig:     dc.transport.TLSClientConfig.Clone(),
-		TLSHandshakeTimeout: dc.transport.TLSHandshakeTimeout,
 		MaxIdleConnsPerHost: 5,
 		IdleConnTimeout:     10 * time.Minute,
 	}
 
 	dc.proxyTransport[proxy] = transport
-	dc.mux.Unlock()
-
 	return transport
 }
 
@@ -174,16 +167,9 @@ func newDoHClient(url string, proxy string, r *Resolver) *dohClient {
 	}
 	addr := net.JoinHostPort(host, port)
 
-	var (
-		timeout        time.Duration
-		proxyTransport map[string]*http.Transport
-	)
-
+	var proxyTransport map[string]*http.Transport
 	if proxy != "" {
-		timeout = proxyTimeout
 		proxyTransport = make(map[string]*http.Transport)
-	} else {
-		timeout = resolver.DefaultDNSTimeout
 	}
 
 	resolved := false
@@ -198,7 +184,6 @@ func newDoHClient(url string, proxy string, r *Resolver) *dohClient {
 		proxy:    proxy,
 		urlLog:   url,
 		resolved: resolved,
-		timeout:  timeout,
 		transport: &http.Transport{
 			ForceAttemptHTTP2: true,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -208,7 +193,6 @@ func newDoHClient(url string, proxy string, r *Resolver) *dohClient {
 				ServerName: host,
 				NextProtos: []string{"dns"},
 			},
-			TLSHandshakeTimeout: timeout,
 			MaxIdleConnsPerHost: 5,
 		},
 		proxyTransport: proxyTransport,

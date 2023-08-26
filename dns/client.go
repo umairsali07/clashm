@@ -77,10 +77,6 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*rMsg, error) {
 		options = append(options, dialer.WithInterface(c.iface))
 	}
 
-	subCtx, cancel := context.WithTimeout(ctx, c.Client.Timeout)
-	defer cancel()
-	ctx = subCtx
-
 	if proxy != "" {
 		msg.Source += "(" + proxy + ")"
 		conn, err = dialContextByProxyOrInterface(ctx, network, netip.MustParseAddr(c.ip), c.port, proxy, options...)
