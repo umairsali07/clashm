@@ -17,6 +17,12 @@ var Path = func() *path {
 	}
 
 	homeDir = P.Join(homeDir, ".config", Name)
+	if _, err = os.Stat(homeDir); err != nil {
+		if home, ok := os.LookupEnv("XDG_CONFIG_HOME"); ok {
+			homeDir = P.Join(home, Name)
+		}
+	}
+
 	return &path{homeDir: homeDir, configFile: "config.yaml"}
 }()
 

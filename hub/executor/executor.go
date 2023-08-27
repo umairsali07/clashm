@@ -323,5 +323,6 @@ func Shutdown() {
 	listener.Cleanup()
 	resolver.StoreFakePoolState()
 
-	log.Warn().Msg("Clash shutting down")
+	L.SetLevel(L.INFO)
+	log.Info().Msg("[Main] Clash shutting down")
 }

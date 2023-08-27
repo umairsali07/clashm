@@ -144,7 +144,7 @@ func doGet(name, file string) (resp *http.Response, err error) {
 			continue
 		}
 
-		log.Info().Msgf("[Config] try to download from %s", req.Host)
+		log.Info().Msgf("[Config] try to download %s from %s", file, req.Host)
 
 		convert.SetUserAgent(req.Header)
 

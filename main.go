@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"syscall"
+	_ "time/tzdata"
 
 	"github.com/phuslu/log"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -16,10 +17,10 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/hub"
 	"github.com/Dreamacro/clash/hub/executor"
+	cLog "github.com/Dreamacro/clash/log"
 )
 
 var (
-	flagset            map[string]bool
 	version            bool
 	testConfig         bool
 	homeDir            string
@@ -30,25 +31,29 @@ var (
 )
 
 func init() {
-	flag.StringVar(&homeDir, "d", "", "set configuration directory")
-	flag.StringVar(&configFile, "f", "", "specify configuration file")
-	flag.StringVar(&externalUI, "ext-ui", "", "override external ui directory")
-	flag.StringVar(&externalController, "ext-ctl", "", "override external controller address")
-	flag.StringVar(&secret, "secret", "", "override secret for RESTful API")
+	flag.StringVar(&homeDir, "d", os.Getenv("CLASH_HOME_DIR"), "set configuration directory")
+	flag.StringVar(&configFile, "f", os.Getenv("CLASH_CONFIG_FILE"), "specify configuration file")
+	flag.StringVar(&externalUI, "ext-ui", os.Getenv("CLASH_OVERRIDE_EXTERNAL_UI_DIR"),
+		"override external ui directory")
+	flag.StringVar(&externalController, "ext-ctl", os.Getenv("CLASH_OVERRIDE_EXTERNAL_CONTROLLER"),
+		"override external controller address")
+	flag.StringVar(&secret, "secret", os.Getenv("CLASH_OVERRIDE_SECRET"),
+		"override secret for RESTful API")
 	flag.BoolVar(&version, "v", false, "show current version of clash")
 	flag.BoolVar(&testConfig, "t", false, "test configuration and exit")
 	flag.Parse()
-
-	flagset = map[string]bool{}
-	flag.Visit(func(f *flag.Flag) {
-		flagset[f.Name] = true
-	})
 }
 
 func main() {
 	_, _ = maxprocs.Set(maxprocs.Logger(func(string, ...any) {}))
 	if version {
-		fmt.Printf("Clash Plus Pro %s %s %s with %s %s\n", C.Version, runtime.GOOS, runtime.GOARCH, runtime.Version(), C.BuildTime)
+		fmt.Printf("Clash Plus Pro %s %s %s with %s %s\n",
+			C.Version,
+			runtime.GOOS,
+			runtime.GOARCH,
+			runtime.Version(),
+			C.BuildTime,
+		)
 		return
 	}
 
@@ -74,39 +79,84 @@ func main() {
 	if err := config.Init(C.Path.HomeDir()); err != nil {
 		log.Fatal().
 			Err(err).
-			Msg("Initial configuration failed")
+			Str("dir", C.Path.HomeDir()).
+			Str("path", C.Path.Config()).
+			Msg("[Config] initial configuration failed")
 	}
 
 	if testConfig {
 		if _, err := executor.Parse(); err != nil {
-			log.Error().Err(err).Msg("[Start]")
-			fmt.Printf("configuration file %s test failed\n", C.Path.Config())
-			os.Exit(1)
+			log.Fatal().
+				Err(err).
+				Str("path", C.Path.Config()).
+				Msg("[Config] configuration file test failed")
 		}
-		fmt.Printf("configuration file %s test is successful\n", C.Path.Config())
+		log.Info().
+			Str("path", C.Path.Config()).
+			Msg("[Config] configuration file test is successful")
 		return
 	}
 
 	var options []hub.Option
-	if flagset["ext-ui"] {
+	if externalUI != "" {
 		options = append(options, hub.WithExternalUI(externalUI))
 	}
-	if flagset["ext-ctl"] {
+	if externalController != "" {
 		options = append(options, hub.WithExternalController(externalController))
 	}
-	if flagset["secret"] {
+	if secret != "" {
 		options = append(options, hub.WithSecret(secret))
 	}
 
 	if err := hub.Parse(options...); err != nil {
 		log.Fatal().
 			Err(err).
-			Msg("Parse config failed")
+			Str("path", C.Path.Config()).
+			Msg("[Config] parse config failed")
 	}
+
+	oldLevel := cLog.Level()
+	cLog.SetLevel(cLog.INFO)
+	log.Info().
+		Str("version", fmt.Sprintf("%s %s %s with %s %s",
+			C.Version,
+			runtime.GOOS,
+			runtime.GOARCH,
+			runtime.Version(),
+			C.BuildTime,
+		)).
+		Msg("[Main] Clash Plus started")
+	cLog.SetLevel(oldLevel)
 
 	defer executor.Shutdown()
 
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	for {
+		s := <-sigCh
+		switch s {
+		case syscall.SIGHUP:
+			level := cLog.Level()
+			cLog.SetLevel(cLog.INFO)
+
+			log.Info().Str("path", C.Path.Config()).Msg("[Main] configuration file reloading...")
+
+			if conf, err := executor.Parse(); err == nil {
+				executor.ApplyConfig(conf, true)
+
+				level = cLog.Level()
+				cLog.SetLevel(cLog.INFO)
+
+				log.Info().Str("path", C.Path.Config()).Msg("[Main] configuration file reloaded")
+			} else {
+				log.Error().
+					Err(err).
+					Str("path", C.Path.Config()).
+					Msg("[Main] reload config failed")
+			}
+			cLog.SetLevel(level)
+		default:
+			return
+		}
+	}
 }

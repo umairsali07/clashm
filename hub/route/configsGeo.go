@@ -11,6 +11,7 @@ import (
 	"github.com/Dreamacro/clash/config"
 	"github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/hub/executor"
+	L "github.com/Dreamacro/clash/log"
 )
 
 var (
@@ -38,22 +39,40 @@ func updateGeoDatabases(w http.ResponseWriter, r *http.Request) {
 	updateGeoMux.Unlock()
 
 	go func() {
+		var (
+			cfg      *config.Config
+			err      error
+			oldLevel = L.Level()
+		)
+
 		defer func() {
+			if err == nil {
+				oldLevel = L.Level()
+				L.SetLevel(L.INFO)
+				log.Info().Str("path", constant.Path.Config()).Msg("[API] configuration file reloaded")
+			}
+			L.SetLevel(oldLevel)
 			updatingGeo = false
 		}()
 
-		log.Warn().Msg("[API] updating GEO databases...")
+		L.SetLevel(L.INFO)
 
-		if err := config.UpdateGeoDatabases(); err != nil {
+		log.Info().Msg("[API] GEO databases updating...")
+
+		if err = config.UpdateGeoDatabases(); err != nil {
 			log.Error().Err(err).Msg("[API] update GEO databases failed")
 			return
 		}
 
-		log.Warn().Msg("[API] update GEO databases successful, apply config...")
+		log.Info().Msg("[API] GEO databases updated")
+		log.Info().Str("path", constant.Path.Config()).Msg("[API] configuration file reloading...")
 
-		cfg, err := executor.ParseWithPath(constant.Path.Config())
+		cfg, err = executor.ParseWithPath(constant.Path.Config())
 		if err != nil {
-			log.Error().Err(err).Msg("[API] update GEO databases failed")
+			log.Error().
+				Err(err).
+				Str("path", constant.Path.Config()).
+				Msg("[API] reload config failed")
 			return
 		}
 

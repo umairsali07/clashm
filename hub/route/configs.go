@@ -2,6 +2,7 @@ package route
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path/filepath"
 
@@ -132,31 +133,69 @@ func updateConfigs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	force := r.URL.Query().Get("force") == "true"
-	var cfg *config.Config
-	var err error
+	var (
+		cfg      *config.Config
+		err      error
+		hasPath  bool
+		oldLevel = L.Level()
+		force    = r.URL.Query().Get("force") == "true"
+	)
+
+	defer func() {
+		if err == nil {
+			oldLevel = L.Level()
+			L.SetLevel(L.INFO)
+			if req.Payload != "" {
+				log.Info().Msg("[API] payload config updated")
+			} else {
+				if hasPath {
+					C.SetConfig(req.Path)
+				}
+				log.Info().Str("path", req.Path).Msg("[API] configuration file reloaded")
+			}
+		}
+		L.SetLevel(oldLevel)
+	}()
+
+	L.SetLevel(L.INFO)
 
 	if req.Payload != "" {
-		log.Warn().Msg("[API] update config by payload")
+		log.Info().Msg("[API] payload config updating...")
+
 		cfg, err = executor.ParseWithBytes([]byte(req.Payload))
 		if err != nil {
+			log.Error().Err(err).Msg("[API] update config failed")
+
 			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, newError(err.Error()))
 			return
 		}
 	} else {
-		if req.Path == "" {
+		log.Info().Str("path", req.Path).Msg("[API] configuration file reloading...")
+
+		if hasPath = req.Path != ""; !hasPath {
 			req.Path = C.Path.Config()
 		}
+
 		if !filepath.IsAbs(req.Path) {
+			err = errors.New("path is not a absolute path")
+			log.Error().
+				Err(err).
+				Str("path", req.Path).
+				Msg("[API] reload config failed")
+
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, newError("path is not a absolute path"))
+			render.JSON(w, r, newError(err.Error()))
 			return
 		}
 
-		log.Warn().Str("file", req.Path).Msg("[API] reload config")
 		cfg, err = executor.ParseWithPath(req.Path)
 		if err != nil {
+			log.Error().
+				Err(err).
+				Str("path", req.Path).
+				Msg("[API] reload config failed")
+
 			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, newError(err.Error()))
 			return

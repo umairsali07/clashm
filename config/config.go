@@ -428,22 +428,14 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 }
 
 func ParseRawConfig(rawCfg *RawConfig) (config *Config, err error) {
-	oldLevel := L.Level()
 	defer func() {
 		if err != nil {
 			providerTypes.Cleanup(config.Proxies, config.Providers)
-			L.SetLevel(oldLevel)
 			config = nil
 		}
 		geodata.CleanGeoSiteCache()
 		runtime.GC()
 	}()
-
-	if rawCfg.LogLevel == L.DEBUG {
-		L.SetLevel(L.DEBUG)
-	} else {
-		L.SetLevel(L.INFO)
-	}
 
 	config = &Config{}
 
