@@ -201,3 +201,36 @@ type UDPPacket interface {
 	// LocalAddr returns the source IP/Port of packet
 	LocalAddr() net.Addr
 }
+
+type RawProxy struct {
+	Name     string         `yaml:"name"`
+	Type     string         `yaml:"type"`
+	Server   string         `yaml:"server"`
+	UUID     string         `yaml:"uuid,omitempty"`
+	Password string         `yaml:"password,omitempty"`
+	M        map[string]any `yaml:",inline"`
+}
+
+func (m *RawProxy) Init() {
+	if m == nil {
+		return
+	}
+	if m.M == nil {
+		m.M = make(map[string]any)
+	}
+	if m.Name != "" {
+		m.M["name"] = m.Name
+	}
+	if m.Type != "" {
+		m.M["type"] = m.Type
+	}
+	if m.Server != "" {
+		m.M["server"] = m.Server
+	}
+	if m.UUID != "" {
+		m.M["uuid"] = m.UUID
+	}
+	if m.Password != "" {
+		m.M["password"] = m.Password
+	}
+}

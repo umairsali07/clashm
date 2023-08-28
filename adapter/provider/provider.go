@@ -1,20 +1,25 @@
 package provider
 
 import (
+	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"runtime"
+	"sync"
 	"time"
 
 	regexp "github.com/dlclark/regexp2"
 	"github.com/samber/lo"
-	"go.uber.org/atomic"
 	"gopkg.in/yaml.v3"
 
 	"github.com/Dreamacro/clash/adapter"
 	"github.com/Dreamacro/clash/adapter/outbound"
 	"github.com/Dreamacro/clash/common/convert"
 	"github.com/Dreamacro/clash/common/singledo"
+	"github.com/Dreamacro/clash/common/structure"
 	"github.com/Dreamacro/clash/component/resolver"
 	C "github.com/Dreamacro/clash/constant"
 	types "github.com/Dreamacro/clash/constant/provider"
@@ -31,7 +36,7 @@ const (
 )
 
 type ProxySchema struct {
-	Proxies []map[string]any `yaml:"proxies"`
+	Proxies []C.RawProxy `yaml:"proxies"`
 }
 
 var _ types.ProxyProvider = (*ProxySetProvider)(nil)
@@ -41,6 +46,9 @@ type ProxySetProvider struct {
 	healthCheck *HealthCheck
 	proxies     []C.Proxy
 	groupNames  []string
+	tmCheck     *time.Timer
+	hash        [16]byte   // config file hash
+	mux         sync.Mutex // guards fetcher vehicle field
 }
 
 func (pp *ProxySetProvider) MarshalJSON() ([]byte, error) {
@@ -62,6 +70,51 @@ func (pp *ProxySetProvider) HealthCheck() {
 }
 
 func (pp *ProxySetProvider) Update() error {
+	defer runtime.GC()
+	pp.mux.Lock()
+
+	buf, err := os.ReadFile(C.Path.Config())
+	if err != nil {
+		pp.mux.Unlock()
+		return err
+	}
+
+	hash := md5.Sum(buf)
+	if !bytes.Equal(pp.hash[:], hash[:]) {
+		rawCfg := struct {
+			ProxyProvider map[string]map[string]any `yaml:"proxy-providers"`
+		}{}
+
+		if err = yaml.Unmarshal(buf, &rawCfg); err != nil {
+			pp.mux.Unlock()
+			return err
+		}
+
+		decoder := structure.NewDecoder(structure.Option{TagName: "provider", WeaklyTypedInput: true})
+
+		schema := &proxyProviderSchema{}
+
+		for name, mapping := range rawCfg.ProxyProvider {
+			if name == pp.name {
+				if err := decoder.Decode(mapping, schema); err != nil {
+					pp.mux.Unlock()
+					return err
+				}
+				break
+			}
+		}
+
+		vehicle, err := newVehicle(schema)
+		if err != nil {
+			pp.mux.Unlock()
+			return err
+		}
+
+		pp.hash = hash
+		pp.fetcher.vehicle = vehicle
+	}
+	pp.mux.Unlock()
+
 	elm, same, err := pp.fetcher.Update()
 	if err == nil && !same {
 		pp.onUpdate(elm)
@@ -92,6 +145,10 @@ func (pp *ProxySetProvider) Touch() {
 }
 
 func (pp *ProxySetProvider) Finalize() {
+	if pp.tmCheck != nil {
+		pp.tmCheck.Stop()
+		pp.tmCheck = nil
+	}
 	pp.healthCheck.close()
 	_ = pp.fetcher.Destroy()
 }
@@ -118,10 +175,10 @@ func (pp *ProxySetProvider) setProxies(proxies []C.Proxy) {
 		statistic.DefaultManager.KickOut(names...)
 		go pp.healthCheck.checkAll()
 	} else {
-		go func() {
-			time.Sleep(45 * time.Second)
+		pp.tmCheck = time.AfterFunc(45*time.Second, func() {
 			pp.healthCheck.checkAll()
-		}()
+			pp.tmCheck = nil
+		})
 	}
 }
 
@@ -174,7 +231,7 @@ type CompatibleProvider struct {
 	providers   []types.ProxyProvider
 	healthCheck *HealthCheck
 	filterRegx  *regexp.Regexp
-	hcWait      *atomic.Bool
+	tmCheck     *time.Timer
 
 	hasProxy    bool
 	hasProvider bool
@@ -204,9 +261,7 @@ func (cp *CompatibleProvider) Update() error {
 func (cp *CompatibleProvider) Initial() error {
 	cp.Forget()
 	if cp.hasProxy && !cp.hasProvider {
-		if cp.healthCheck.auto() {
-			go cp.healthCheckWait()
-		}
+		cp.healthCheckWait()
 	} else if len(cp.Proxies()) == 0 {
 		return errors.New("provider need one proxy at least")
 	}
@@ -263,8 +318,8 @@ func (cp *CompatibleProvider) Proxies() []C.Proxy {
 		return proxies, nil
 	})
 
-	if !hitCache && cp.healthCheck.auto() {
-		go cp.healthCheckWait()
+	if !hitCache {
+		cp.healthCheckWait()
 	}
 
 	return proxies
@@ -294,21 +349,25 @@ func (cp *CompatibleProvider) Forget() {
 }
 
 func (cp *CompatibleProvider) Finalize() {
+	if cp.tmCheck != nil {
+		cp.tmCheck.Stop()
+		cp.tmCheck = nil
+	}
 	cp.healthCheck.close()
 	cp.providers = nil
 	cp.Forget()
 }
 
 func (cp *CompatibleProvider) healthCheckWait() {
-	if cp.hcWait.Load() {
+	if cp.tmCheck != nil || !cp.healthCheck.auto() {
 		return
 	}
-	cp.hcWait.Store(true)
-	time.Sleep(30 * time.Second)
-	if cp.healthCheck.auto() {
-		cp.healthCheck.checkAll()
-	}
-	cp.hcWait.Store(false)
+	cp.tmCheck = time.AfterFunc(30*time.Second, func() {
+		if cp.healthCheck.auto() {
+			cp.healthCheck.checkAll()
+		}
+		cp.tmCheck = nil
+	})
 }
 
 func NewCompatibleProvider(name string, hc *HealthCheck, filterRegx *regexp.Regexp) (*CompatibleProvider, error) {
@@ -320,7 +379,6 @@ func NewCompatibleProvider(name string, hc *HealthCheck, filterRegx *regexp.Rege
 		name:        name,
 		healthCheck: hc,
 		filterRegx:  filterRegx,
-		hcWait:      atomic.NewBool(false),
 	}
 
 	hc.setProxyFn(func() []C.Proxy {
@@ -356,15 +414,19 @@ func proxiesParseAndFilter(
 			if err1 != nil {
 				return nil, errors.New("parse proxy provider failure, invalid data format")
 			}
-			schema.Proxies = proxies
+			schema.Proxies = lo.Map(proxies, func(m map[string]any, _ int) C.RawProxy {
+				return C.RawProxy{M: m}
+			})
 		}
 
 		if len(schema.Proxies) == 0 {
 			return nil, errors.New("file must have a `proxies` field")
 		}
 
-		proxies := []C.Proxy{}
-		for idx, mapping := range schema.Proxies {
+		proxies := make([]C.Proxy, 0)
+		for idx, ps := range schema.Proxies {
+			ps.Init()
+			mapping := ps.M
 			name, ok := mapping["name"].(string)
 			if ok && len(filter) > 0 {
 				matched, err := filterReg.MatchString(name)

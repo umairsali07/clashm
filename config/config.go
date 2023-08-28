@@ -331,7 +331,7 @@ type RawConfig struct {
 	MITM          RawMitm                   `yaml:"mitm"`
 	Experimental  Experimental              `yaml:"experimental"`
 	Profile       Profile                   `yaml:"profile"`
-	Proxy         []map[string]any          `yaml:"proxies"`
+	Proxy         []C.RawProxy              `yaml:"proxies"`
 	ProxyGroup    []map[string]any          `yaml:"proxy-groups"`
 	Rule          []RawRule                 `yaml:"rules"`
 	Script        Script                    `yaml:"script"`
@@ -360,7 +360,7 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 		LogLevel:        L.INFO,
 		Hosts:           map[string]string{},
 		Rule:            []RawRule{},
-		Proxy:           []map[string]any{},
+		Proxy:           []C.RawProxy{},
 		ProxyGroup:      []map[string]any{},
 		Tun: Tun{
 			Enable: false,
@@ -583,7 +583,8 @@ func parseProxies(cfg *RawConfig) (proxiesMap map[string]C.Proxy, pdsMap map[str
 
 	// parse proxy
 	for idx, mapping := range proxiesConfig {
-		proxy, err := adapter.ParseProxy(mapping, forceCertVerify, false, false, false, false)
+		mapping.Init()
+		proxy, err := adapter.ParseProxy(mapping.M, forceCertVerify, false, false, false, false)
 		if err != nil {
 			return nil, nil, fmt.Errorf("proxy %d: %w", idx, err)
 		}

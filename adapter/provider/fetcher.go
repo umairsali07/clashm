@@ -26,6 +26,7 @@ type fetcher[V any] struct {
 	interval  time.Duration
 	updatedAt *time.Time
 	ticker    *time.Ticker
+	tmUpdate  *time.Timer
 	done      chan struct{}
 	hash      [16]byte
 	parser    parser[V]
@@ -129,6 +130,10 @@ func (f *fetcher[V]) Update() (V, bool, error) {
 }
 
 func (f *fetcher[V]) Destroy() error {
+	if f.tmUpdate != nil {
+		f.tmUpdate.Stop()
+		f.tmUpdate = nil
+	}
 	if f.ticker != nil {
 		select {
 		case f.done <- struct{}{}:
@@ -159,10 +164,10 @@ func (f *fetcher[V]) pullLoop(immediately bool) {
 	}
 
 	if immediately {
-		go func() {
-			time.Sleep(time.Second * 50)
+		f.tmUpdate = time.AfterFunc(50*time.Second, func() {
 			update()
-		}()
+			f.tmUpdate = nil
+		})
 	}
 
 	for {

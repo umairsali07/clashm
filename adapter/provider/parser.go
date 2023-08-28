@@ -60,37 +60,44 @@ func ParseProxyProvider(name string, mapping map[string]any, forceCertVerify boo
 		return nil, err
 	}
 
-	if schema.Header == nil {
-		schema.Header = map[string][]string{
-			"User-Agent": {"ClashPlusPro/" + C.Version},
-		}
-	} else if _, ok := schema.Header["User-Agent"]; !ok {
-		schema.Header["User-Agent"] = []string{"ClashPlusPro/" + C.Version}
-	}
-
 	var hcInterval time.Duration
 	if schema.HealthCheck.Enable {
 		hcInterval = schema.HealthCheck.Interval
 	}
 	hc := NewHealthCheck([]C.Proxy{}, schema.HealthCheck.URL, hcInterval, schema.HealthCheck.Lazy)
 
-	path := C.Path.Resolve(schema.Path)
-
-	var vehicle types.Vehicle
-	switch schema.Type {
-	case "file":
-		vehicle = NewFileVehicle(path)
-	case "http":
-		if !C.Path.IsSubHomeDir(path) {
-			return nil, errors.New("the path is not a sub path of home directory")
-		}
-		vehicle = NewHTTPVehicle(path, schema.URL, schema.URLProxy, schema.Header)
-	default:
-		return nil, fmt.Errorf("%w: %s", errVehicleType, schema.Type)
+	vehicle, err := newVehicle(schema)
+	if err != nil {
+		return nil, err
 	}
 
 	interval := schema.Interval
 	filter := schema.Filter
 	return NewProxySetProvider(name, interval, filter, vehicle, hc, schema.ForceCertVerify,
 		schema.UDP, schema.RandomHost, schema.DisableDNS, schema.PrefixName)
+}
+
+func newVehicle(schema *proxyProviderSchema) (types.Vehicle, error) {
+	path := C.Path.Resolve(schema.Path)
+
+	switch schema.Type {
+	case "file":
+		return NewFileVehicle(path), nil
+	case "http":
+		if !C.Path.IsSubHomeDir(path) {
+			return nil, errors.New("the path is not a sub path of home directory")
+		}
+
+		if schema.Header == nil {
+			schema.Header = map[string][]string{
+				"User-Agent": {"ClashPlusPro/" + C.Version},
+			}
+		} else if _, ok := schema.Header["User-Agent"]; !ok {
+			schema.Header["User-Agent"] = []string{"ClashPlusPro/" + C.Version}
+		}
+
+		return NewHTTPVehicle(path, schema.URL, schema.URLProxy, schema.Header), nil
+	default:
+		return nil, fmt.Errorf("%w: %s", errVehicleType, schema.Type)
+	}
 }
