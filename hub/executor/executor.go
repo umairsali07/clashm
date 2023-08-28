@@ -221,7 +221,7 @@ func updateInbounds(inbounds []C.Inbound, force bool) {
 
 func updateGeneral(general *config.General, force bool) {
 	tunnel.SetMode(general.Mode)
-	resolver.DisableIPv6 = !general.IPv6
+	resolver.SetDisableIPv6(!general.IPv6)
 
 	defaultInterface := general.Interface
 	if defaultInterface != "" || (defaultInterface == "" && !general.Tun.Enable) {

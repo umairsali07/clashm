@@ -31,6 +31,8 @@ var (
 
 	// DefaultDNSTimeout defined the default dns request timeout
 	DefaultDNSTimeout = time.Second * 5
+
+	needProxyHostIPv6 = false
 )
 
 var (
@@ -129,6 +131,12 @@ func ResolveIPv6ProxyServerHost(host string) (netip.Addr, error) {
 	return resolveProxyServerHostByType(host, typeAAAA)
 }
 
+// SetDisableIPv6 set DisableIPv6 & needProxyHostIPv6 value
+func SetDisableIPv6(v bool) {
+	DisableIPv6 = v
+	needProxyHostIPv6 = !v
+}
+
 // RemoveCache remove cache by host
 func RemoveCache(host string) {
 	if DefaultResolver != nil {
@@ -198,7 +206,7 @@ func resolveProxyServerHostByType(host string, _type uint16) (netip.Addr, error)
 		ctx = context.WithValue(context.Background(), proxyServerHostKey, struct{}{})
 	)
 
-	ips, err = lookupIPByResolverAndType(ctx, host, DefaultResolver, _type, true)
+	ips, err = lookupIPByResolverAndType(ctx, host, DefaultResolver, _type, needProxyHostIPv6)
 	if err != nil {
 		return netip.Addr{}, err
 	}
