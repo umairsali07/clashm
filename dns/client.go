@@ -66,7 +66,7 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*rMsg, error) {
 		options []dialer.Option
 		conn    net.Conn
 		proxy   = c.proxy
-		msg     = &rMsg{Source: c.source}
+		msg     = &rMsg{Source: c.source, Lan: c.lan}
 	)
 
 	if p, ok := resolver.GetProxy(ctx); ok && !c.lan {
@@ -88,6 +88,19 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*rMsg, error) {
 		return msg, err
 	}
 
+	if c.Client.Net == "tcp-tls" {
+		conn = tls.Client(conn, c.TLSConfig)
+	}
+
+	co := &D.Conn{
+		Conn:         conn,
+		UDPSize:      c.Client.UDPSize,
+		TsigSecret:   c.Client.TsigSecret,
+		TsigProvider: c.Client.TsigProvider,
+	}
+
+	defer co.Close()
+
 	// miekg/dns ExchangeContext doesn't respond to context cancel.
 	// this is a workaround
 	type result struct {
@@ -98,22 +111,8 @@ func (c *client) ExchangeContext(ctx context.Context, m *D.Msg) (*rMsg, error) {
 	ch := make(chan result, 1)
 
 	go func() {
-		if c.Client.Net == "tcp-tls" {
-			conn = tls.Client(conn, c.TLSConfig)
-		}
-
-		co := &D.Conn{
-			Conn:         conn,
-			UDPSize:      c.Client.UDPSize,
-			TsigSecret:   c.Client.TsigSecret,
-			TsigProvider: c.Client.TsigProvider,
-		}
-
 		msg1, _, err1 := c.Client.ExchangeWithConn(m, co)
-
 		ch <- result{msg1, err1}
-
-		_ = co.Close()
 	}()
 
 	select {

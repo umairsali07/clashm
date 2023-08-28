@@ -169,20 +169,11 @@ func (r *Resolver) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, s
 	)
 
 	cacheM, expireTime, hit := r.lruCache.GetWithExpire(key)
-	if hit {
-		now := time.Now()
+	if hit && time.Now().Before(expireTime) {
 		msg1 := cacheM.Copy()
 		msg = msg1.Msg
 		source = msg1.Source
-		if expireTime.Before(now) {
-			setMsgTTL(msg, uint32(1))
-			go func() { // Continue fetch
-				_, _ = r.exchangeWithoutCache(resolver.CopyCtxValues(ctx), m, q, key, true)
-			}()
-		} else {
-			ttl := max(time.Until(expireTime).Seconds(), 1)
-			setMsgMaxTTL(msg, uint32(ttl))
-		}
+		setMsgMaxTTL(msg, uint32(time.Until(expireTime).Seconds()))
 		return
 	}
 	msg1, err := r.exchangeWithoutCache(ctx, m, q, key, true)
@@ -324,7 +315,7 @@ func (r *Resolver) exchangePolicyCombine(ctx context.Context, clients []dnsClien
 
 	wg.Add(2)
 
-	ctx1, cancel1 := context.WithTimeout(resolver.CopyCtxValues(ctx), timeout)
+	ctx1, cancel1 := context.WithTimeout(resolver.CopyCtxValues(ctx), resolver.DefaultDNSTimeout)
 	defer cancel1()
 
 	ctx2, cancel2 := context.WithTimeout(resolver.CopyCtxValues(ctx), timeout)
