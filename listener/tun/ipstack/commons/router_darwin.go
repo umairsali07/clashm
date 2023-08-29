@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/phuslu/log"
 	"golang.org/x/net/route"
+	"golang.org/x/sync/singleflight"
 	"golang.org/x/sys/unix"
 
 	C "github.com/Dreamacro/clash/constant"
@@ -24,7 +26,7 @@ import (
 var (
 	routeCtx       context.Context
 	routeCancel    context.CancelFunc
-	routeChangeMux sync.Mutex
+	singleRoute    singleflight.Group
 	routeSubscribe *subscriber
 )
 
@@ -134,7 +136,7 @@ func StartDefaultInterfaceChangeMonitor() {
 
 	var (
 		err       error
-		routeChan = make(chan *net.Interface)
+		routeChan = make(chan *route.RouteMessage, 5)
 		closeChan = make(chan struct{})
 	)
 
@@ -159,11 +161,12 @@ func StartDefaultInterfaceChangeMonitor() {
 		for {
 			select {
 			case update := <-routeChan:
-				defaultRouteChangeCallback(update)
+				go defaultRouteChangeCallback(update)
 			case <-routeCtx.Done():
 				close(closeChan)
 				for range routeChan {
 				}
+				log.Info().Msg("[Route] unsubscribe route event notifications")
 				return
 			}
 		}
@@ -193,7 +196,7 @@ func StopDefaultInterfaceChangeMonitor() {
 }
 
 func defaultRouteInterface() (*DefaultInterface, error) {
-	rib, err := route.FetchRIB(unix.AF_UNSPEC, unix.NET_RT_DUMP2, 0)
+	rib, err := route.FetchRIB(unix.AF_INET, unix.NET_RT_DUMP2, 0)
 	if err != nil {
 		return nil, fmt.Errorf("route.FetchRIB: %w", err)
 	}
@@ -205,7 +208,7 @@ func defaultRouteInterface() (*DefaultInterface, error) {
 
 	for _, message := range msgs {
 		routeMessage := message.(*route.RouteMessage)
-		if (routeMessage.Flags & unix.RTF_GATEWAY) == 0 {
+		if (routeMessage.Flags & (unix.RTF_UP | unix.RTF_GATEWAY | unix.RTF_STATIC)) == 0 {
 			continue
 		}
 
@@ -217,9 +220,11 @@ func defaultRouteInterface() (*DefaultInterface, error) {
 			via = netip.AddrFrom4(ra.IP)
 		case *route.Inet6Addr:
 			via = netip.AddrFrom16(ra.IP)
+		default:
+			continue
 		}
 
-		if !via.IsValid() || !via.IsUnspecified() || len(addresses) < 2 {
+		if !via.IsUnspecified() || len(addresses) < 2 {
 			continue
 		}
 
@@ -237,8 +242,6 @@ func defaultRouteInterface() (*DefaultInterface, error) {
 			continue
 		}
 
-		ip, _ := netip.AddrFromSlice(addrs[0].(*net.IPNet).IP)
-
 		var gw netip.Addr
 		switch ra := addresses[1].(type) {
 		case *route.Inet4Addr:
@@ -247,10 +250,20 @@ func defaultRouteInterface() (*DefaultInterface, error) {
 			gw = netip.AddrFrom16(ra.IP)
 		}
 
+		var ip netip.Addr
+		for _, addr := range addrs {
+			if a, ok := addr.(*net.IPNet); ok {
+				ip, _ = netip.AddrFromSlice(a.IP)
+				if ip = ip.Unmap(); ip.Is4() && gw.Is4() {
+					break
+				}
+			}
+		}
+
 		return &DefaultInterface{
 			Name:    ifaceM.Name,
 			Index:   routeMessage.Index,
-			IP:      ip.Unmap(),
+			IP:      ip,
 			Gateway: gw,
 		}, nil
 	}
@@ -258,15 +271,28 @@ func defaultRouteInterface() (*DefaultInterface, error) {
 	return nil, errInterfaceNotFound
 }
 
-func defaultRouteChangeCallback(update *net.Interface) {
-	routeChangeMux.Lock()
-	defer routeChangeMux.Unlock()
+func defaultRouteChangeCallback(msg *route.RouteMessage) {
+	if msg.Type == unix.RTM_ADD {
+		var via netip.Addr
+		switch ra := msg.Addrs[0].(type) {
+		case *route.Inet4Addr:
+			via = netip.AddrFrom4(ra.IP)
+		default:
+			return
+		}
 
-	if strings.HasPrefix(update.Name, "utun") {
-		return
+		if !via.IsUnspecified() {
+			return
+		}
+		onChangeDefaultRoute()
+	} else {
+		key := strconv.FormatInt(time.Now().Unix(), 10)
+		_, _, _ = singleRoute.Do(key, func() (any, error) {
+			onChangeDefaultRoute()
+			time.Sleep(time.Millisecond)
+			return nil, nil
+		})
 	}
-
-	onChangeDefaultRoute()
 }
 
 func addRoute(sock int, addr, mask *route.Inet4Addr, link *route.Inet4Addr, flag int) error {
@@ -334,7 +360,7 @@ type ifreqAddr struct {
 }
 
 type subscriber struct {
-	ch   chan<- *net.Interface
+	ch   chan<- *route.RouteMessage
 	done <-chan struct{}
 
 	routeSocket int
@@ -368,11 +394,6 @@ func (s *subscriber) routineRouteListener() {
 			if errno, ok := err.(unix.Errno); ok && errno == unix.EINTR {
 				goto retry
 			}
-
-			log.Error().
-				Err(err).
-				Int("routeSocket", s.routeSocket).
-				Msg("[TUN] failed to read route message, unsubscribed route event notifications")
 			return
 		}
 
@@ -392,21 +413,16 @@ func (s *subscriber) routineRouteListener() {
 		var msg *route.RouteMessage
 		for _, message := range msgs {
 			m := message.(*route.RouteMessage)
-			if (m.Flags & unix.RTF_GATEWAY) != 0 {
+			if (m.Flags & (unix.RTF_UP | unix.RTF_GATEWAY | unix.RTF_STATIC)) != 0 {
 				msg = m
 				break
 			}
 		}
 
-		if msg == nil || msg.Index == 0 {
+		if msg == nil {
 			continue
 		}
 
-		ifaceM, err := retryInterfaceByIndex(msg.Index)
-		if err != nil {
-			continue
-		}
-
-		s.ch <- ifaceM
+		s.ch <- msg
 	}
 }
