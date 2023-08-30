@@ -3,7 +3,6 @@ package listener
 import (
 	"fmt"
 	"net"
-	"net/netip"
 	"reflect"
 	"strconv"
 	"strings"
@@ -36,7 +35,6 @@ import (
 var (
 	allowLan    = false
 	bindAddress = "*"
-	lastTunConf *config.Tun
 
 	tcpInbounds  = map[string]C.Inbound{}
 	udpInbounds  = map[string]C.Inbound{}
@@ -125,7 +123,8 @@ func createListener(inbound C.Inbound, tcpIn chan<- C.ConnContext, udpIn chan<- 
 	}
 
 	au := "none"
-	if inbound.Authentication != nil {
+	auLen := len(lo.FromPtr(inbound.Authentication))
+	if auLen != 0 {
 		au = "local"
 	} else if A.Authenticator() != nil {
 		au = "global"
@@ -141,7 +140,7 @@ func createListener(inbound C.Inbound, tcpIn chan<- C.ConnContext, udpIn chan<- 
 			return
 		}
 
-		if !inbound.IsFromPortCfg && inbound.Authentication != nil {
+		if !inbound.IsFromPortCfg && auLen != 0 {
 			if tl, ok := tcpListener.(C.AuthenticatorListener); ok {
 				authUsers := config.ParseAuthentication(*inbound.Authentication)
 				tl.SetAuthenticator(authUsers)
@@ -205,10 +204,11 @@ func closeListener(inbound C.Inbound) {
 }
 
 func getNeedCloseAndCreateInbound(originInbounds []C.Inbound, newInbounds []C.Inbound) ([]C.Inbound, []C.Inbound) {
-	needCloseMap := map[string]C.Inbound{}
-	needClose := []C.Inbound{}
-	needCreate := []C.Inbound{}
-
+	var (
+		needClose    []C.Inbound
+		needCreate   []C.Inbound
+		needCloseMap = make(map[string]C.Inbound)
+	)
 	for _, m := range originInbounds {
 		needCloseMap[m.Key()] = m
 	}
@@ -234,8 +234,7 @@ func getNeedCloseAndCreateInbound(originInbounds []C.Inbound, newInbounds []C.In
 func ReCreateListeners(inbounds []C.Inbound, tcpIn chan<- C.ConnContext, udpIn chan<- *inbound.PacketAdapter) {
 	inboundsMux.Lock()
 	defer inboundsMux.Unlock()
-	newInbounds := []C.Inbound{}
-	newInbounds = append(newInbounds, inbounds...)
+	newInbounds := append([]C.Inbound{}, inbounds...)
 	for _, m := range getInbounds() {
 		if m.IsFromPortCfg {
 			newInbounds = append(newInbounds, m)
@@ -248,8 +247,7 @@ func ReCreateListeners(inbounds []C.Inbound, tcpIn chan<- C.ConnContext, udpIn c
 func ReCreatePortsListeners(ports Ports, tcpIn chan<- C.ConnContext, udpIn chan<- *inbound.PacketAdapter) {
 	inboundsMux.Lock()
 	defer inboundsMux.Unlock()
-	newInbounds := []C.Inbound{}
-	newInbounds = addPortInbound(newInbounds, C.InboundTypeHTTP, ports.Port)
+	newInbounds := addPortInbound([]C.Inbound{}, C.InboundTypeHTTP, ports.Port)
 	newInbounds = addPortInbound(newInbounds, C.InboundTypeSocks, ports.SocksPort)
 	newInbounds = addPortInbound(newInbounds, C.InboundTypeRedir, ports.RedirPort)
 	newInbounds = addPortInbound(newInbounds, C.InboundTypeTproxy, ports.TProxyPort)
@@ -278,9 +276,10 @@ func reCreateListeners(inbounds []C.Inbound, tcpIn chan<- C.ConnContext, udpIn c
 	for _, m := range needCreate {
 		createListener(m, tcpIn, udpIn)
 	}
+	C.SetProxyInbound(tcpInbounds)
 }
 
-func ReCreateTun(tunConf *config.Tun, tcpIn chan<- C.ConnContext, udpIn chan<- *inbound.PacketAdapter) {
+func ReCreateTun(tunConf *C.Tun, tcpIn chan<- C.ConnContext, udpIn chan<- *inbound.PacketAdapter) {
 	tunMux.Lock()
 	defer tunMux.Unlock()
 
@@ -308,7 +307,7 @@ func ReCreateTun(tunConf *config.Tun, tcpIn chan<- C.ConnContext, udpIn chan<- *
 		tunStackListener = nil
 	}
 
-	lastTunConf = tunConf
+	C.SetLastTunConf(tunConf)
 
 	if !tunConf.Enable {
 		return
@@ -356,6 +355,7 @@ func ReCreateRedirToTun(ifaceNames []string) {
 		return
 	}
 
+	lastTunConf := C.GetLastTunConf()
 	if lastTunConf == nil || !lastTunConf.Enable {
 		return
 	}
@@ -540,7 +540,7 @@ func PatchTunnel(tunnels []config.Tunnel, tcpIn chan<- C.ConnContext, udpIn chan
 }
 
 func GetInbounds() []C.Inbound {
-	return lo.Filter(getInbounds(), func(inbound C.Inbound, idx int) bool {
+	return lo.Filter(getInbounds(), func(inbound C.Inbound, _ int) bool {
 		return !inbound.IsFromPortCfg
 	})
 }
@@ -621,33 +621,8 @@ func getPort(addr string) int {
 	return int(port)
 }
 
-// GetTunConf return the last tun config
-func GetTunConf() config.Tun {
-	if lastTunConf == nil {
-		addrPort := C.DNSAddrPort{
-			AddrPort: netip.MustParseAddrPort("0.0.0.0:53"),
-		}
-		return config.Tun{
-			Enable: false,
-			Stack:  C.TunGvisor,
-			DNSHijack: []C.DNSUrl{ // default hijack all dns query
-				{
-					Network:  "udp",
-					AddrPort: addrPort,
-				},
-				{
-					Network:  "tcp",
-					AddrPort: addrPort,
-				},
-			},
-			AutoRoute:           true,
-			AutoDetectInterface: false,
-		}
-	}
-	return *lastTunConf
-}
-
-func hasTunConfigChange(tunConf *config.Tun) bool {
+func hasTunConfigChange(tunConf *C.Tun) bool {
+	lastTunConf := C.GetLastTunConf()
 	if lastTunConf == nil {
 		return true
 	}
@@ -665,7 +640,7 @@ func hasTunConfigChange(tunConf *config.Tun) bool {
 }
 
 type tunChangeCallback struct {
-	tunConf config.Tun
+	tunConf C.Tun
 	tcpIn   chan<- C.ConnContext
 	udpIn   chan<- *inbound.PacketAdapter
 }

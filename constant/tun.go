@@ -25,14 +25,63 @@ const (
 	TunPaused
 )
 
-type TUNStack int
-
 type TUNState int
 
 type TUNChangeCallback interface {
 	Pause()
 	Resume()
 }
+
+// Tun config
+type Tun struct {
+	Enable              bool          `yaml:"enable" json:"enable"`
+	Device              string        `yaml:"device" json:"device"`
+	Stack               TUNStack      `yaml:"stack" json:"stack"`
+	DNSHijack           []DNSUrl      `yaml:"dns-hijack" json:"dns-hijack"`
+	AutoRoute           bool          `yaml:"auto-route" json:"auto-route"`
+	AutoDetectInterface bool          `yaml:"auto-detect-interface" json:"auto-detect-interface"`
+	TunAddressPrefix    *netip.Prefix `yaml:"-" json:"-"`
+	RedirectToTun       []string      `yaml:"-" json:"-"`
+	StopRouteListener   bool          `yaml:"-" json:"-"`
+}
+
+var lastTunConf *Tun
+
+func GetLastTunConf() *Tun {
+	return lastTunConf
+}
+
+func SetLastTunConf(conf *Tun) {
+	lastTunConf = conf
+}
+
+// GetTunConf returns the last tun config
+func GetTunConf() Tun {
+	if lastTunConf == nil {
+		addrPort := DNSAddrPort{
+			AddrPort: netip.MustParseAddrPort("0.0.0.0:53"),
+		}
+		return Tun{
+			Enable: false,
+			Stack:  TunGvisor,
+			DNSHijack: []DNSUrl{ // default hijack all dns query
+				{
+					Network:  "udp",
+					AddrPort: addrPort,
+				},
+				{
+					Network:  "tcp",
+					AddrPort: addrPort,
+				},
+			},
+			AutoRoute:           true,
+			AutoDetectInterface: false,
+		}
+	}
+	return *lastTunConf
+}
+
+type TUNStack int
 
 // UnmarshalYAML unserialize TUNStack with yaml
 func (e *TUNStack) UnmarshalYAML(unmarshal func(any) error) error {

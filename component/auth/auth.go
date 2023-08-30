@@ -11,12 +11,15 @@ type Authenticator interface {
 	Verify(user []byte, pass []byte) bool
 	HasUser(user []byte) bool
 	Users() []string
+	RandomUser() *AuthUser
 }
 
 type AuthUser struct {
 	User string
 	Pass string
 }
+
+var _ Authenticator = (*inMemoryAuthenticator)(nil)
 
 type inMemoryAuthenticator struct {
 	storage   *sync.Map
@@ -35,6 +38,23 @@ func (au *inMemoryAuthenticator) HasUser(user []byte) bool {
 
 func (au *inMemoryAuthenticator) Users() []string {
 	return au.usernames
+}
+
+func (au *inMemoryAuthenticator) RandomUser() *AuthUser {
+	if au == nil || len(au.usernames) == 0 {
+		return nil
+	}
+
+	user := lo.Sample(au.usernames)
+	realPass, ok := au.storage.Load(user)
+	if !ok {
+		return nil
+	}
+
+	return &AuthUser{
+		User: user,
+		Pass: string(realPass.([]byte)),
+	}
 }
 
 func NewAuthenticator(users []AuthUser) Authenticator {

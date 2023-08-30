@@ -14,7 +14,6 @@ import (
 	"github.com/Dreamacro/clash/common/cmd"
 	"github.com/Dreamacro/clash/component/dialer"
 	"github.com/Dreamacro/clash/component/resolver"
-	"github.com/Dreamacro/clash/config"
 	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/listener/tun/device"
 	"github.com/Dreamacro/clash/listener/tun/device/tun"
@@ -27,7 +26,7 @@ import (
 
 // New TunAdapter
 func New(
-	tunConf *config.Tun,
+	tunConf *C.Tun,
 	tcpIn chan<- C.ConnContext,
 	udpIn chan<- *inbound.PacketAdapter,
 	tunChangeCallback C.TUNChangeCallback,

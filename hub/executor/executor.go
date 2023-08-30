@@ -117,7 +117,7 @@ func GetGeneral() *config.General {
 		LogLevel:       L.Level(),
 		IPv6:           !resolver.DisableIPv6,
 		Sniffing:       tunnel.Sniffing(),
-		Tun:            listener.GetTunConf(),
+		Tun:            C.GetTunConf(),
 	}
 
 	return general
@@ -133,7 +133,7 @@ func updateExperimental(c *config.Config) {
 	tunnel.UDPFallbackPolicy.Store(udpPolicy)
 }
 
-func updateDNS(c *config.DNS, t *config.Tun) {
+func updateDNS(c *config.DNS, t *C.Tun) {
 	cfg := dns.Config{
 		Main:         c.NameServer,
 		Fallback:     c.Fallback,

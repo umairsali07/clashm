@@ -33,6 +33,7 @@ func (v VehicleType) String() string {
 type Vehicle interface {
 	Read() ([]byte, error)
 	Path() string
+	Proxy() bool
 	Type() VehicleType
 }
 

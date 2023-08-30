@@ -34,6 +34,14 @@ func getConfigs(w http.ResponseWriter, r *http.Request) {
 }
 
 func patchConfigs(w http.ResponseWriter, r *http.Request) {
+	type tun struct {
+		Enable              *bool       `json:"enable,omitempty"`
+		Device              *string     `json:"device,omitempty"`
+		Stack               *C.TUNStack `json:"stack,omitempty"`
+		DNSHijack           *[]C.DNSUrl `json:"dns-hijack,omitempty"`
+		AutoRoute           *bool       `json:"auto-route,omitempty"`
+		AutoDetectInterface *bool       `json:"auto-detect-interface,omitempty"`
+	}
 	general := struct {
 		Port        *int               `json:"port,omitempty"`
 		SocksPort   *int               `json:"socks-port,omitempty"`
@@ -47,14 +55,7 @@ func patchConfigs(w http.ResponseWriter, r *http.Request) {
 		LogLevel    *L.LogLevel        `json:"log-level,omitempty"`
 		IPv6        *bool              `json:"ipv6,omitempty"`
 		Sniffing    *bool              `json:"sniffing,omitempty"`
-		Tun         *struct {
-			Enable              *bool       `json:"enable,omitempty"`
-			Device              *string     `json:"device,omitempty"`
-			Stack               *C.TUNStack `json:"stack,omitempty"`
-			DNSHijack           *[]C.DNSUrl `json:"dns-hijack,omitempty"`
-			AutoRoute           *bool       `json:"auto-route,omitempty"`
-			AutoDetectInterface *bool       `json:"auto-detect-interface,omitempty"`
-		}
+		Tun         *tun               `json:"tun,omitempty"`
 	}{}
 
 	if err := render.DecodeJSON(r.Body, &general); err != nil {
@@ -102,7 +103,7 @@ func patchConfigs(w http.ResponseWriter, r *http.Request) {
 
 	if general.Tun != nil {
 		tunSchema := general.Tun
-		tunConf := listener.GetTunConf()
+		tunConf := C.GetTunConf()
 		tunConf.StopRouteListener = true
 
 		tunConf.Enable = lo.FromPtrOr(tunSchema.Enable, tunConf.Enable)
@@ -171,11 +172,11 @@ func updateConfigs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		log.Info().Str("path", req.Path).Msg("[API] configuration file reloading...")
-
 		if hasPath = req.Path != ""; !hasPath {
 			req.Path = C.Path.Config()
 		}
+
+		log.Info().Str("path", req.Path).Msg("[API] configuration file reloading...")
 
 		if !filepath.IsAbs(req.Path) {
 			err = errors.New("path is not a absolute path")

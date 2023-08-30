@@ -12,6 +12,7 @@ import (
 	"time"
 
 	regexp "github.com/dlclark/regexp2"
+	"github.com/phuslu/log"
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
 
@@ -71,6 +72,9 @@ func (pp *ProxySetProvider) HealthCheck() {
 
 func (pp *ProxySetProvider) Update() error {
 	defer runtime.GC()
+
+	log.Debug().Str("name", pp.Name()).Msg("[Provider] proxies updating...")
+
 	pp.mux.Lock()
 
 	buf, err := os.ReadFile(C.Path.Config())
@@ -116,19 +120,29 @@ func (pp *ProxySetProvider) Update() error {
 	pp.mux.Unlock()
 
 	elm, same, err := pp.fetcher.Update()
-	if err == nil && !same {
-		pp.onUpdate(elm)
+	if err != nil {
+		return err
 	}
-	return err
+	if same {
+		log.Debug().Str("name", pp.Name()).Msg("[Provider] proxies doesn't change")
+		return nil
+	}
+
+	pp.onUpdate(elm)
+	return nil
 }
 
 func (pp *ProxySetProvider) Initial() error {
-	elm, err := pp.fetcher.Initial()
+	proxies, err := pp.fetcher.Initial()
 	if err != nil {
 		return err
 	}
 
-	pp.onUpdate(elm)
+	if proxies == nil {
+		name := pp.name + "-" + "Reject"
+		proxies = append(proxies, adapter.NewProxy(outbound.NewRejectByName(name)))
+	}
+	pp.onUpdate(proxies)
 	return nil
 }
 
@@ -198,9 +212,13 @@ func NewProxySetProvider(
 	disableDNS bool,
 	prefixName string,
 ) (*ProxySetProvider, error) {
-	filterReg, err := regexp.Compile(filter, 0)
-	if err != nil {
-		return nil, fmt.Errorf("invalid filter regex: %w", err)
+	var filterReg *regexp.Regexp
+	if filter != "" {
+		f, err := regexp.Compile(filter, 0)
+		if err != nil {
+			return nil, fmt.Errorf("invalid filter regex: %w", err)
+		}
+		filterReg = f
 	}
 
 	if hc.auto() {
@@ -216,7 +234,7 @@ func NewProxySetProvider(
 		name,
 		interval,
 		vehicle,
-		proxiesParseAndFilter(filter, filterReg, forceCertVerify, udp, randomHost, disableDNS, prefixName),
+		proxiesParseAndFilter(filterReg, forceCertVerify, udp, randomHost, disableDNS, prefixName),
 		proxiesOnUpdate(pd),
 	)
 
@@ -395,7 +413,6 @@ func proxiesOnUpdate(pd *ProxySetProvider) func([]C.Proxy) {
 }
 
 func proxiesParseAndFilter(
-	filter string,
 	filterReg *regexp.Regexp,
 	forceCertVerify bool,
 	udp bool,
@@ -428,7 +445,7 @@ func proxiesParseAndFilter(
 			ps.Init()
 			mapping := ps.M
 			name, ok := mapping["name"].(string)
-			if ok && len(filter) > 0 {
+			if ok && filterReg != nil {
 				matched, err := filterReg.MatchString(name)
 				if err != nil {
 					return nil, fmt.Errorf("match filter regex failed: %w", err)
@@ -450,7 +467,7 @@ func proxiesParseAndFilter(
 		}
 
 		if len(proxies) == 0 {
-			if len(filter) > 0 {
+			if filterReg != nil {
 				return nil, errors.New("doesn't match any proxy, please check your filter")
 			}
 			return nil, errors.New("file doesn't have any proxy")

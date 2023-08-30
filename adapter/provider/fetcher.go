@@ -45,6 +45,7 @@ func (f *fetcher[V]) Initial() (V, error) {
 	var (
 		buf               []byte
 		err               error
+		elm               V
 		isLocal           bool
 		immediatelyUpdate bool
 	)
@@ -55,6 +56,11 @@ func (f *fetcher[V]) Initial() (V, error) {
 		isLocal = true
 		immediatelyUpdate = f.interval != 0 && time.Since(modTime) > f.interval
 	} else {
+		// delay fetch for using proxy
+		if f.vehicle.Proxy() {
+			immediatelyUpdate = true
+			goto end
+		}
 		buf, err = f.vehicle.Read()
 	}
 
@@ -62,10 +68,16 @@ func (f *fetcher[V]) Initial() (V, error) {
 		return lo.Empty[V](), err
 	}
 
-	proxies, err := f.parser(buf)
+	elm, err = f.parser(buf)
 	if err != nil {
 		if !isLocal {
 			return lo.Empty[V](), err
+		}
+
+		// delay fetch for using proxy
+		if f.vehicle.Proxy() {
+			immediatelyUpdate = true
+			goto end
 		}
 
 		// parse local file error, fallback to remote
@@ -74,7 +86,7 @@ func (f *fetcher[V]) Initial() (V, error) {
 			return lo.Empty[V](), err
 		}
 
-		proxies, err = f.parser(buf)
+		elm, err = f.parser(buf)
 		if err != nil {
 			return lo.Empty[V](), err
 		}
@@ -90,12 +102,13 @@ func (f *fetcher[V]) Initial() (V, error) {
 
 	f.hash = md5.Sum(buf)
 
-	// pull proxies automatically
-	if f.ticker != nil {
+end:
+	// pull element automatically
+	if f.vehicle.Type() != types.File {
 		go f.pullLoop(immediatelyUpdate)
 	}
 
-	return proxies, nil
+	return elm, nil
 }
 
 func (f *fetcher[V]) Update() (V, bool, error) {
@@ -164,10 +177,17 @@ func (f *fetcher[V]) pullLoop(immediately bool) {
 	}
 
 	if immediately {
+		if f.tmUpdate != nil {
+			f.tmUpdate.Stop()
+		}
 		f.tmUpdate = time.AfterFunc(50*time.Second, func() {
 			update()
 			f.tmUpdate = nil
 		})
+	}
+
+	if f.ticker == nil {
+		return
 	}
 
 	for {
@@ -194,6 +214,9 @@ func safeWrite(path string, buf []byte) error {
 }
 
 func newFetcher[V any](name string, interval time.Duration, vehicle types.Vehicle, parser parser[V], onUpdate func(V)) *fetcher[V] {
+	if interval < 0 {
+		interval = 0
+	}
 	var ticker *time.Ticker
 	if interval != 0 {
 		ticker = time.NewTicker(interval)

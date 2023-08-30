@@ -57,9 +57,13 @@ func (r *Reject) DisableDnsResolve() bool {
 }
 
 func NewReject() *Reject {
+	return NewRejectByName("REJECT")
+}
+
+func NewRejectByName(name string) *Reject {
 	return &Reject{
 		Base: &Base{
-			name: "REJECT",
+			name: name,
 			tp:   C.Reject,
 			udp:  true,
 		},

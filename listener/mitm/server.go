@@ -17,6 +17,7 @@ import (
 	"github.com/Dreamacro/clash/common/cert"
 	"github.com/Dreamacro/clash/component/auth"
 	C "github.com/Dreamacro/clash/constant"
+	authStore "github.com/Dreamacro/clash/listener/auth"
 	rewrites "github.com/Dreamacro/clash/rewrite"
 	"github.com/Dreamacro/clash/tunnel"
 )
@@ -71,7 +72,11 @@ func New(addr string, in chan<- C.ConnContext) (C.Listener, error) {
 	if proxyDone.Load() == 0 {
 		ml.asProxy = true
 		proxyDone.Store(1)
-		tunnel.SetMitmOutbound(outbound.NewMitm(ml.Address()))
+		auths := ml.auth
+		if auths == nil {
+			auths = authStore.Authenticator()
+		}
+		tunnel.SetMitmOutbound(outbound.NewMitm(ml.Address(), auths))
 	}
 
 	return ml, nil

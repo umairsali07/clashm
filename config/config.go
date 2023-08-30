@@ -47,7 +47,7 @@ type General struct {
 	Sniffing       bool         `json:"sniffing"`
 	Interface      string       `json:"-"`
 	RoutingMark    int          `json:"-"`
-	Tun            Tun          `json:"tun"`
+	Tun            C.Tun        `json:"tun"`
 	EBpf           EBpf         `json:"-"`
 }
 
@@ -104,19 +104,6 @@ type Profile struct {
 	StoreSelected bool `yaml:"store-selected"`
 	StoreFakeIP   bool `yaml:"store-fake-ip"`
 	Tracing       bool `yaml:"tracing"`
-}
-
-// Tun config
-type Tun struct {
-	Enable              bool          `yaml:"enable" json:"enable"`
-	Device              string        `yaml:"device" json:"device"`
-	Stack               C.TUNStack    `yaml:"stack" json:"stack"`
-	DNSHijack           []C.DNSUrl    `yaml:"dns-hijack" json:"dns-hijack"`
-	AutoRoute           bool          `yaml:"auto-route" json:"auto-route"`
-	AutoDetectInterface bool          `yaml:"auto-detect-interface" json:"auto-detect-interface"`
-	TunAddressPrefix    *netip.Prefix `yaml:"-" json:"-"`
-	RedirectToTun       []string      `yaml:"-" json:"-"`
-	StopRouteListener   bool          `yaml:"-" json:"-"`
 }
 
 // Script config
@@ -327,7 +314,7 @@ type RawConfig struct {
 	Hosts         map[string]string         `yaml:"hosts"`
 	Inbounds      []C.Inbound               `yaml:"inbounds"`
 	DNS           RawDNS                    `yaml:"dns"`
-	Tun           Tun                       `yaml:"tun"`
+	Tun           C.Tun                     `yaml:"tun"`
 	MITM          RawMitm                   `yaml:"mitm"`
 	Experimental  Experimental              `yaml:"experimental"`
 	Profile       Profile                   `yaml:"profile"`
@@ -362,7 +349,7 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 		Rule:            []RawRule{},
 		Proxy:           []C.RawProxy{},
 		ProxyGroup:      []map[string]any{},
-		Tun: Tun{
+		Tun: C.Tun{
 			Enable: false,
 			Device: "",
 			Stack:  C.TunGvisor,

@@ -39,21 +39,10 @@ func ParseProxyProvider(name string, mapping map[string]any, forceCertVerify boo
 	decoder := structure.NewDecoder(structure.Option{TagName: "provider", WeaklyTypedInput: true})
 
 	schema := &proxyProviderSchema{
+		ForceCertVerify: forceCertVerify,
 		HealthCheck: healthCheckSchema{
 			Lazy: true,
 		},
-	}
-
-	if forceCertVerify {
-		schema.ForceCertVerify = true
-	}
-
-	if schema.Interval < 0 {
-		schema.Interval = 0
-	}
-
-	if schema.HealthCheck.Interval < 0 {
-		schema.HealthCheck.Interval = 0
 	}
 
 	if err := decoder.Decode(mapping, schema); err != nil {

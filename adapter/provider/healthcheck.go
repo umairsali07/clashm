@@ -109,6 +109,9 @@ func (hc *HealthCheck) close() {
 }
 
 func NewHealthCheck(proxies []C.Proxy, url string, interval time.Duration, lazy bool) *HealthCheck {
+	if interval < 0 {
+		interval = 0
+	}
 	return &HealthCheck{
 		proxies:   proxies,
 		url:       url,

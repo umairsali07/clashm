@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -96,9 +97,12 @@ func (i *Inbound) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON implements encoding/json.Marshaler
 func (i *Inbound) MarshalJSON() ([]byte, error) {
-	auths := make([]string, 0)
-	if i.Authentication != nil {
-		auths = lo.Map(*i.Authentication, func(s string, _ int) string {
+	auLen := len(lo.FromPtr(i.Authentication))
+	auths := make([]string, 0, auLen)
+	if auLen != 0 {
+		auths = lo.Map(*i.Authentication, func(au string, _ int) string {
+			ss := strings.Split(au, ":")
+			s := ss[0]
 			l := len(s)
 			if l == 0 {
 				return ""
@@ -165,11 +169,67 @@ func verifyInbound(i *Inbound) error {
 	}
 	_, portStr, err := net.SplitHostPort(i.BindAddress)
 	if err != nil {
-		return fmt.Errorf("bind address parse error, address: %s, error: %w", i.ToAlias(), err)
+		return fmt.Errorf("parse inbound bind address error, address: %s, error: %w", i.ToAlias(), err)
 	}
 	port, err := strconv.ParseUint(portStr, 10, 16)
 	if err != nil || port == 0 {
-		return fmt.Errorf("invalid bind port, address: %s", i.ToAlias())
+		return fmt.Errorf("invalid inbound bind port, address: %s", i.ToAlias())
+	}
+	if i.Authentication != nil && lo.SomeBy(*i.Authentication, func(s string) bool {
+		return !strings.Contains(s, ":")
+	}) {
+		return fmt.Errorf("invalid inbound authentication, address: %s", i.ToAlias())
 	}
 	return nil
+}
+
+var proxyInbound *Inbound
+
+// SetProxyInbound assigns a http or socks inbound to proxyInbound
+func SetProxyInbound(tcpInbounds map[string]Inbound) {
+	tcpIns := tcpInbounds
+	for _, tcp := range tcpIns {
+		switch tcp.Type {
+		case InboundTypeHTTP, InboundTypeSocks, InboundTypeSocks5, InboundTypeMixed:
+			proxyInbound = &tcp
+			return
+		}
+	}
+	proxyInbound = nil
+}
+
+// ProxyURL returns a proxy function (for use in a http.Transport),
+// nil if no inbound ports are set
+func ProxyURL(auth auth.Authenticator) func(*http.Request) (*url.URL, error) {
+	mInbound := proxyInbound
+	if mInbound == nil {
+		return nil
+	}
+
+	var schema string
+	switch mInbound.Type {
+	case InboundTypeHTTP:
+		schema = "http"
+	case InboundTypeSocks, InboundTypeSocks5, InboundTypeMixed:
+		schema = "socks5"
+	default:
+		return nil
+	}
+
+	var userInfo *url.Userinfo
+	if auths := mInbound.Authentication; len(lo.FromPtr(auths)) != 0 {
+		user := strings.Split((*auths)[0], ":")
+		userInfo = url.UserPassword(user[0], user[1])
+	} else if auth != nil {
+		if user := auth.RandomUser(); user != nil {
+			userInfo = url.UserPassword(user.User, user.Pass)
+		}
+	}
+
+	fixedURL := &url.URL{
+		Scheme: schema,
+		User:   userInfo,
+		Host:   mInbound.BindAddress,
+	}
+	return http.ProxyURL(fixedURL)
 }
