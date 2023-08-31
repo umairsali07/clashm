@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/netip"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/phuslu/log"
 	"golang.org/x/net/route"
-	"golang.org/x/sync/singleflight"
 	"golang.org/x/sys/unix"
 
 	C "github.com/Dreamacro/clash/constant"
@@ -26,7 +24,7 @@ import (
 var (
 	routeCtx       context.Context
 	routeCancel    context.CancelFunc
-	singleRoute    singleflight.Group
+	routeChangeMux sync.Mutex
 	routeSubscribe *subscriber
 )
 
@@ -272,27 +270,19 @@ func defaultRouteInterface() (*DefaultInterface, error) {
 }
 
 func defaultRouteChangeCallback(msg *route.RouteMessage) {
-	if msg.Type == unix.RTM_ADD {
-		var via netip.Addr
-		switch ra := msg.Addrs[0].(type) {
-		case *route.Inet4Addr:
-			via = netip.AddrFrom4(ra.IP)
-		default:
-			return
-		}
-
-		if !via.IsUnspecified() {
-			return
-		}
-		onChangeDefaultRoute()
-	} else {
-		key := strconv.FormatInt(time.Now().Unix(), 10)
-		_, _, _ = singleRoute.Do(key, func() (any, error) {
-			onChangeDefaultRoute()
-			time.Sleep(time.Millisecond)
-			return nil, nil
-		})
+	if len(msg.Addrs) == 0 {
+		return
 	}
+	ra, ok := msg.Addrs[0].(*route.Inet4Addr)
+	if !ok {
+		return
+	}
+	if via := netip.AddrFrom4(ra.IP); !via.IsUnspecified() {
+		return
+	}
+	routeChangeMux.Lock()
+	onChangeDefaultRoute()
+	routeChangeMux.Unlock()
 }
 
 func addRoute(sock int, addr, mask *route.Inet4Addr, link *route.Inet4Addr, flag int) error {
