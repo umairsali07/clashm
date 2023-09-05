@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -467,27 +466,30 @@ func testLargeDataWithPacketConn(t *testing.T, pc net.PacketConn, port int) erro
 	pingCh, pongCh, test := newLargeDataPair()
 	writeRandData := func(pc net.PacketConn, addr net.Addr) (map[int][]byte, error) {
 		hashMap := map[int][]byte{}
-		mux := sync.Mutex{}
+		bufs := [][]byte{}
+
 		for i := 0; i < times; i++ {
-			go func(idx int) {
-				buf := make([]byte, chunkSize)
-				if _, err := rand.Read(buf[1:]); err != nil {
-					t.Log(err.Error())
-					return
-				}
-				buf[0] = byte(idx)
+			idx := i
+			buf := make([]byte, chunkSize)
+			rand.Read(buf[1:])
+			buf[0] = byte(idx)
 
-				hash := md5.Sum(buf)
-				mux.Lock()
-				hashMap[idx] = hash[:]
-				mux.Unlock()
-
-				if _, err := pc.WriteTo(buf, addr); err != nil {
-					t.Log(err.Error())
-					return
-				}
-			}(i)
+			hash := md5.Sum(buf)
+			hashMap[idx] = hash[:]
+			bufs = append(bufs, buf)
 		}
+
+		go func() {
+			cursor := 0
+			for {
+				idx := cursor % times
+				buf := bufs[idx]
+				if _, err := pc.WriteTo(buf, addr); err != nil {
+					return
+				}
+				cursor++
+			}
+		}()
 
 		return hashMap, nil
 	}
@@ -497,15 +499,16 @@ func testLargeDataWithPacketConn(t *testing.T, pc net.PacketConn, port int) erro
 		hashMap := map[int][]byte{}
 		buf := make([]byte, 64*1024)
 
-		for i := 0; i < times; i++ {
+		for len(hashMap) != times {
 			_, rAddr, err = l.ReadFrom(buf)
 			if err != nil {
-				t.Log(err.Error())
 				return
 			}
 
-			hash := md5.Sum(buf[:chunkSize])
-			hashMap[int(buf[0])] = hash[:]
+			if _, ok := hashMap[int(buf[0])]; !ok {
+				hash := md5.Sum(buf[:chunkSize])
+				hashMap[int(buf[0])] = hash[:]
+			}
 		}
 
 		sendHash, err := writeRandData(l, rAddr)
@@ -530,15 +533,16 @@ func testLargeDataWithPacketConn(t *testing.T, pc net.PacketConn, port int) erro
 		hashMap := map[int][]byte{}
 		buf := make([]byte, 64*1024)
 
-		for i := 0; i < times; i++ {
+		for len(hashMap) != times {
 			_, _, err := pc.ReadFrom(buf)
 			if err != nil {
-				t.Log(err.Error())
 				return
 			}
 
-			hash := md5.Sum(buf[:chunkSize])
-			hashMap[int(buf[0])] = hash[:]
+			if _, ok := hashMap[int(buf[0])]; !ok {
+				hash := md5.Sum(buf[:chunkSize])
+				hashMap[int(buf[0])] = hash[:]
+			}
 		}
 
 		pongCh <- hashPair{
