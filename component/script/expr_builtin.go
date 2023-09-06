@@ -73,7 +73,7 @@ func (*stringInString) Visit(node *ast.Node) {
 	}
 }
 
-func parseEnv(mtd *C.Metadata) shortcutEnvironment {
+func parseEnv(mtd *C.Metadata, hasNow bool) shortcutEnvironment {
 	env := shortcutEnvironment{
 		Network:      mtd.NetWork.String(),
 		Type:         mtd.Type.String(),
@@ -85,7 +85,6 @@ func parseEnv(mtd *C.Metadata) shortcutEnvironment {
 		ProcessPath:  mtd.ProcessPath,
 		UserAgent:    mtd.UserAgent,
 		SpecialProxy: mtd.SpecialProxy,
-		Now:          newNowExpr(),
 
 		InCidr:  uInCidr,
 		InIPSet: uInIPSet,
@@ -98,6 +97,10 @@ func parseEnv(mtd *C.Metadata) shortcutEnvironment {
 
 	if mtd.DstIP.IsValid() {
 		env.DstIP = mtd.DstIP.String()
+	}
+
+	if hasNow {
+		env.Now = makeNowField()
 	}
 
 	env.ResolveIP = func(host string) string {
@@ -121,7 +124,7 @@ func parseEnv(mtd *C.Metadata) shortcutEnvironment {
 	return env
 }
 
-func newNowExpr() nowExpr {
+func makeNowField() nowExpr {
 	t := time.Now()
 	return nowExpr{
 		Year:       t.Year(),

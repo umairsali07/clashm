@@ -3,7 +3,7 @@ module github.com/Dreamacro/clash
 go 1.21
 
 require (
-	github.com/antonmedv/expr v1.15.0
+	github.com/antonmedv/expr v1.15.1
 	github.com/cilium/ebpf v0.11.0
 	github.com/dlclark/regexp2 v1.10.0
 	github.com/go-chi/chi/v5 v5.0.10
@@ -11,10 +11,10 @@ require (
 	github.com/go-chi/render v1.0.3
 	github.com/gofrs/uuid/v5 v5.0.0
 	github.com/gorilla/websocket v1.5.0
-	github.com/insomniacslk/dhcp v0.0.0-20230830143216-01274d66fc98
+	github.com/insomniacslk/dhcp v0.0.0-20230906122924-c71a6be05968
 	github.com/miekg/dns v1.1.55
 	github.com/oschwald/geoip2-golang v1.9.0
-	github.com/phuslu/log v1.0.87
+	github.com/phuslu/log v1.0.88
 	github.com/samber/lo v1.38.1
 	github.com/stretchr/testify v1.8.4
 	github.com/vishvananda/netlink v1.2.1-beta.2.0.20230807190133-6afddb37c1f0

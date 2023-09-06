@@ -5,6 +5,7 @@ import (
 
 	"github.com/antonmedv/expr"
 	"github.com/antonmedv/expr/vm"
+	"github.com/antonmedv/expr/vm/runtime"
 
 	C "github.com/Dreamacro/clash/constant"
 )
@@ -15,6 +16,7 @@ var _ C.Matcher = (*ExprMatcher)(nil)
 
 type ExprMatcher struct {
 	name    string
+	hasNow  bool
 	program *vm.Program
 }
 
@@ -27,7 +29,7 @@ func (*ExprMatcher) Eval(*C.Metadata) (string, error) {
 }
 
 func (e *ExprMatcher) Match(mtd *C.Metadata) (bool, error) {
-	env := parseEnv(mtd)
+	env := parseEnv(mtd, e.hasNow)
 
 	result, err := expr.Run(e.program, env)
 	if err != nil {
@@ -51,11 +53,22 @@ func NewExprMatcher(name, code string) (*ExprMatcher, error) {
 
 	program, err := expr.Compile(code, options...)
 	if err != nil {
-		return nil, fmt.Errorf("compile script code error: %w", err)
+		return nil, fmt.Errorf("compile expr code error: %w", err)
+	}
+
+	var hasNow bool
+	for _, m := range program.Constants {
+		if f, ok := m.(*runtime.Field); ok {
+			if l := len(f.Path); l != 0 && f.Path[0] == "now" {
+				hasNow = true
+				break
+			}
+		}
 	}
 
 	return &ExprMatcher{
 		name:    name,
+		hasNow:  hasNow,
 		program: program,
 	}, nil
 }
