@@ -12,6 +12,7 @@ jobs:
         with:
           check-latest: true
           go-version-file: './go.mod'
+          cache: false
 
       - name: Go cache paths
         id: go-cache-paths

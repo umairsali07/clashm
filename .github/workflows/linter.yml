@@ -11,6 +11,7 @@ jobs:
         with:
           check-latest: true
           go-version-file: './go.mod'
+          cache: false
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
