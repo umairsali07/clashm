@@ -10,8 +10,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          check-latest: true
-          go-version-file: './go.mod'
+          go-version: 'stable'
           cache: false
 
       - name: Go cache paths
