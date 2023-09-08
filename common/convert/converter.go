@@ -331,16 +331,12 @@ func ConvertsV2Ray(buf []byte) ([]map[string]any, error) {
 			vless["port"] = urlVless.Port()
 			vless["uuid"] = urlVless.User.Username()
 			vless["udp"] = true
+			vless["tls"] = true
 			vless["skip-cert-verify"] = false
 
 			sni := query.Get("sni")
 			if sni != "" {
 				vless["servername"] = sni
-			}
-
-			flow := strings.ToLower(query.Get("flow"))
-			if flow != "" {
-				vless["flow"] = flow
 			}
 
 			network := strings.ToLower(query.Get("type"))
@@ -349,6 +345,9 @@ func ConvertsV2Ray(buf []byte) ([]map[string]any, error) {
 			}
 
 			if network == "ws" {
+				security := strings.ToLower(query.Get("security"))
+				vless["tls"] = security == "tls"
+
 				headers := make(map[string]any)
 				wsOpts := make(map[string]any)
 
