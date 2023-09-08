@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Dreamacro/clash/adapter"
 	"github.com/Dreamacro/clash/common/structure"
 	C "github.com/Dreamacro/clash/constant"
 	types "github.com/Dreamacro/clash/constant/provider"
@@ -29,17 +30,18 @@ type proxyProviderSchema struct {
 	HealthCheck     healthCheckSchema   `provider:"health-check,omitempty"`
 	ForceCertVerify bool                `provider:"force-cert-verify,omitempty"`
 	UDP             bool                `provider:"udp,omitempty"`
-	RandomHost      bool                `provider:"rand-host,omitempty"`
+	DisableUDP      bool                `provider:"disable-udp,omitempty"`
 	DisableDNS      bool                `provider:"disable-dns,omitempty"`
+	RandomHost      bool                `provider:"rand-host,omitempty"`
 	PrefixName      string              `provider:"prefix-name,omitempty"`
 	Header          map[string][]string `provider:"header,omitempty"`
 }
 
-func ParseProxyProvider(name string, mapping map[string]any, forceCertVerify bool) (types.ProxyProvider, error) {
+func ParseProxyProvider(name string, mapping map[string]any, globalForceCertVerify bool) (types.ProxyProvider, error) {
 	decoder := structure.NewDecoder(structure.Option{TagName: "provider", WeaklyTypedInput: true})
 
 	schema := &proxyProviderSchema{
-		ForceCertVerify: forceCertVerify,
+		ForceCertVerify: globalForceCertVerify,
 		HealthCheck: healthCheckSchema{
 			Lazy: true,
 		},
@@ -62,8 +64,16 @@ func ParseProxyProvider(name string, mapping map[string]any, forceCertVerify boo
 
 	interval := schema.Interval
 	filter := schema.Filter
-	return NewProxySetProvider(name, interval, filter, vehicle, hc, schema.ForceCertVerify,
-		schema.UDP, schema.RandomHost, schema.DisableDNS, schema.PrefixName)
+	option := adapter.ProxyOption{
+		ForceCertVerify: schema.ForceCertVerify,
+		ForceUDP:        schema.UDP,
+		DisableUDP:      schema.DisableUDP,
+		DisableDNS:      schema.DisableDNS,
+		RandomHost:      schema.RandomHost,
+		PrefixName:      schema.PrefixName,
+		AutoCipher:      true,
+	}
+	return NewProxySetProvider(name, interval, filter, vehicle, hc, globalForceCertVerify, option)
 }
 
 func newVehicle(schema *proxyProviderSchema) (types.Vehicle, error) {

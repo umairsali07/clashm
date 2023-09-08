@@ -10,7 +10,17 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 )
 
-func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, randomHost, disableDNS bool) (C.Proxy, error) {
+type ProxyOption struct {
+	ForceCertVerify bool
+	ForceUDP        bool
+	DisableUDP      bool
+	DisableDNS      bool
+	AutoCipher      bool
+	RandomHost      bool
+	PrefixName      string
+}
+
+func ParseProxy(mapping map[string]any, option ProxyOption) (C.Proxy, error) {
 	decoder := structure.NewDecoder(structure.Option{TagName: "proxy", WeaklyTypedInput: true})
 	proxyType, existType := mapping["type"].(string)
 	if !existType {
@@ -28,13 +38,16 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if err != nil {
 			break
 		}
-		if udp {
+		if option.ForceUDP {
 			ssOption.UDP = true
 		}
-		if randomHost {
+		if option.DisableUDP {
+			ssOption.UDP = false
+		}
+		if option.RandomHost {
 			ssOption.RandomHost = true
 		}
-		if disableDNS {
+		if option.DisableDNS {
 			ssOption.RemoteDnsResolve = false
 		}
 		proxy, err = outbound.NewShadowSocks(*ssOption)
@@ -44,13 +57,16 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if err != nil {
 			break
 		}
-		if udp {
+		if option.ForceUDP {
 			ssrOption.UDP = true
 		}
-		if randomHost {
+		if option.DisableUDP {
+			ssrOption.UDP = false
+		}
+		if option.RandomHost {
 			ssrOption.RandomHost = true
 		}
-		if disableDNS {
+		if option.DisableDNS {
 			ssrOption.RemoteDnsResolve = false
 		}
 		proxy, err = outbound.NewShadowSocksR(*ssrOption)
@@ -60,13 +76,13 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if err != nil {
 			break
 		}
-		if forceCertVerify {
+		if option.ForceCertVerify {
 			socksOption.SkipCertVerify = false
 		}
-		if udp {
+		if option.ForceUDP {
 			socksOption.UDP = true
 		}
-		if disableDNS {
+		if option.DisableDNS {
 			socksOption.RemoteDnsResolve = false
 		}
 		proxy = outbound.NewSocks5(*socksOption)
@@ -76,10 +92,10 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if err != nil {
 			break
 		}
-		if forceCertVerify {
+		if option.ForceCertVerify {
 			httpOption.SkipCertVerify = false
 		}
-		if disableDNS {
+		if option.DisableDNS {
 			httpOption.RemoteDnsResolve = false
 		}
 		proxy = outbound.NewHttp(*httpOption)
@@ -97,19 +113,22 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 			break
 		}
 		vmessOption.HTTPOpts.Method = util.EmptyOr(strings.ToUpper(vmessOption.HTTPOpts.Method), "GET")
-		if forceCertVerify {
+		if option.ForceCertVerify {
 			vmessOption.SkipCertVerify = false
 		}
-		if udp {
+		if option.ForceUDP {
 			vmessOption.UDP = true
 		}
-		if autoCipher {
+		if option.DisableUDP {
+			vmessOption.UDP = false
+		}
+		if option.AutoCipher {
 			vmessOption.Cipher = "auto"
 		}
-		if randomHost {
+		if option.RandomHost {
 			vmessOption.RandomHost = true
 		}
-		if disableDNS {
+		if option.DisableDNS {
 			vmessOption.RemoteDnsResolve = false
 		}
 		proxy, err = outbound.NewVmess(*vmessOption)
@@ -127,14 +146,20 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 			break
 		}
 		vlessOption.HTTPOpts.Method = util.EmptyOr(strings.ToUpper(vlessOption.HTTPOpts.Method), "GET")
-		if forceCertVerify {
+		if option.ForceCertVerify {
 			vlessOption.SkipCertVerify = false
 		}
-		if udp {
+		if option.ForceUDP {
 			vlessOption.UDP = true
 		}
-		if disableDNS {
+		if option.DisableUDP {
+			vlessOption.UDP = false
+		}
+		if option.DisableDNS {
 			vlessOption.RemoteDnsResolve = false
+		}
+		if option.RandomHost {
+			vlessOption.RandomHost = true
 		}
 		proxy, err = outbound.NewVless(*vlessOption)
 	case "snell":
@@ -143,13 +168,16 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if err != nil {
 			break
 		}
-		if udp {
+		if option.ForceUDP {
 			snellOption.UDP = true
 		}
-		if randomHost {
+		if option.DisableUDP {
+			snellOption.UDP = false
+		}
+		if option.RandomHost {
 			snellOption.RandomHost = true
 		}
-		if disableDNS {
+		if option.DisableDNS {
 			snellOption.RemoteDnsResolve = false
 		}
 		proxy, err = outbound.NewSnell(*snellOption)
@@ -159,13 +187,16 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if err != nil {
 			break
 		}
-		if forceCertVerify {
+		if option.ForceCertVerify {
 			trojanOption.SkipCertVerify = false
 		}
-		if udp {
+		if option.ForceUDP {
 			trojanOption.UDP = true
 		}
-		if disableDNS {
+		if option.DisableUDP {
+			trojanOption.UDP = false
+		}
+		if option.DisableDNS {
 			trojanOption.RemoteDnsResolve = false
 		}
 		proxy, err = outbound.NewTrojan(*trojanOption)
@@ -177,7 +208,7 @@ func ParseProxy(mapping map[string]any, forceCertVerify, udp, autoCipher, random
 		if err != nil {
 			break
 		}
-		if udp {
+		if option.ForceUDP {
 			wireguardOption.UDP = true
 		}
 		proxy, err = outbound.NewWireGuard(*wireguardOption)

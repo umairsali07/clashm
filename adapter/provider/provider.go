@@ -43,13 +43,15 @@ type ProxySchema struct {
 var _ types.ProxyProvider = (*ProxySetProvider)(nil)
 
 type ProxySetProvider struct {
-	*fetcher[[]C.Proxy]
 	healthCheck *HealthCheck
 	proxies     []C.Proxy
 	groupNames  []string
+	globalFCV   bool
 	tmCheck     *time.Timer
-	hash        [16]byte   // config file hash
-	mux         sync.Mutex // guards fetcher vehicle field
+
+	mux  sync.Mutex // guards following fields
+	hash [16]byte   // config file hash
+	*fetcher[[]C.Proxy]
 }
 
 func (pp *ProxySetProvider) MarshalJSON() ([]byte, error) {
@@ -73,8 +75,6 @@ func (pp *ProxySetProvider) HealthCheck() {
 func (pp *ProxySetProvider) Update() error {
 	defer runtime.GC()
 
-	log.Debug().Str("name", pp.Name()).Msg("[Provider] proxies updating...")
-
 	pp.mux.Lock()
 
 	buf, err := os.ReadFile(C.Path.Config())
@@ -85,23 +85,23 @@ func (pp *ProxySetProvider) Update() error {
 
 	hash := md5.Sum(buf)
 	if !bytes.Equal(pp.hash[:], hash[:]) {
+		pp.mux.Unlock()
+
 		rawCfg := struct {
 			ProxyProvider map[string]map[string]any `yaml:"proxy-providers"`
 		}{}
 
 		if err = yaml.Unmarshal(buf, &rawCfg); err != nil {
-			pp.mux.Unlock()
 			return err
 		}
 
 		decoder := structure.NewDecoder(structure.Option{TagName: "provider", WeaklyTypedInput: true})
 
-		schema := &proxyProviderSchema{}
+		schema := &proxyProviderSchema{ForceCertVerify: pp.globalFCV}
 
 		for name, mapping := range rawCfg.ProxyProvider {
 			if name == pp.name {
 				if err := decoder.Decode(mapping, schema); err != nil {
-					pp.mux.Unlock()
 					return err
 				}
 				break
@@ -110,12 +110,28 @@ func (pp *ProxySetProvider) Update() error {
 
 		vehicle, err := newVehicle(schema)
 		if err != nil {
+			return err
+		}
+
+		option := adapter.ProxyOption{
+			ForceCertVerify: schema.ForceCertVerify,
+			ForceUDP:        schema.UDP,
+			DisableUDP:      schema.DisableUDP,
+			DisableDNS:      schema.DisableDNS,
+			RandomHost:      schema.RandomHost,
+			PrefixName:      schema.PrefixName,
+			AutoCipher:      true,
+		}
+
+		pp.mux.Lock()
+
+		_, err = newOrUpdateFetcher(pp.name, schema.Interval, schema.Filter, vehicle, nil, pp.globalFCV, option, pp)
+		if err != nil {
 			pp.mux.Unlock()
 			return err
 		}
 
 		pp.hash = hash
-		pp.fetcher.vehicle = vehicle
 	}
 	pp.mux.Unlock()
 
@@ -124,7 +140,7 @@ func (pp *ProxySetProvider) Update() error {
 		return err
 	}
 	if same {
-		log.Debug().Str("name", pp.Name()).Msg("[Provider] proxies doesn't change")
+		log.Info().Str("name", pp.Name()).Msg("[Provider] proxies doesn't change")
 		return nil
 	}
 
@@ -206,11 +222,21 @@ func NewProxySetProvider(
 	filter string,
 	vehicle types.Vehicle,
 	hc *HealthCheck,
-	forceCertVerify bool,
-	udp bool,
-	randomHost bool,
-	disableDNS bool,
-	prefixName string,
+	globalForceCertVerify bool,
+	option adapter.ProxyOption,
+) (*ProxySetProvider, error) {
+	return newOrUpdateFetcher(name, interval, filter, vehicle, hc, globalForceCertVerify, option, nil)
+}
+
+func newOrUpdateFetcher(
+	name string,
+	interval time.Duration,
+	filter string,
+	vehicle types.Vehicle,
+	hc *HealthCheck,
+	globalForceCertVerify bool,
+	option adapter.ProxyOption,
+	pd *ProxySetProvider,
 ) (*ProxySetProvider, error) {
 	var filterReg *regexp.Regexp
 	if filter != "" {
@@ -221,20 +247,25 @@ func NewProxySetProvider(
 		filterReg = f
 	}
 
-	if hc.auto() {
-		go hc.process()
-	}
+	if pd == nil {
+		if hc.auto() {
+			go hc.process()
+		}
 
-	pd := &ProxySetProvider{
-		proxies:     []C.Proxy{},
-		healthCheck: hc,
+		pd = &ProxySetProvider{
+			proxies:     []C.Proxy{},
+			healthCheck: hc,
+			globalFCV:   globalForceCertVerify,
+		}
+	} else {
+		_ = pd.fetcher.Destroy()
 	}
 
 	pd.fetcher = newFetcher[[]C.Proxy](
 		name,
 		interval,
 		vehicle,
-		proxiesParseAndFilter(filterReg, forceCertVerify, udp, randomHost, disableDNS, prefixName),
+		proxiesParseAndFilter(filterReg, option),
 		proxiesOnUpdate(pd),
 	)
 
@@ -412,14 +443,7 @@ func proxiesOnUpdate(pd *ProxySetProvider) func([]C.Proxy) {
 	}
 }
 
-func proxiesParseAndFilter(
-	filterReg *regexp.Regexp,
-	forceCertVerify bool,
-	udp bool,
-	randomHost bool,
-	disableDNS bool,
-	prefixName string,
-) parser[[]C.Proxy] {
+func proxiesParseAndFilter(filterReg *regexp.Regexp, option adapter.ProxyOption) parser[[]C.Proxy] {
 	return func(buf []byte) ([]C.Proxy, error) {
 		schema := &ProxySchema{}
 
@@ -455,11 +479,11 @@ func proxiesParseAndFilter(
 				}
 			}
 
-			if prefixName != "" {
-				mapping["name"] = prefixName + name
+			if option.PrefixName != "" {
+				mapping["name"] = option.PrefixName + name
 			}
 
-			proxy, err := adapter.ParseProxy(mapping, forceCertVerify, udp, true, randomHost, disableDNS)
+			proxy, err := adapter.ParseProxy(mapping, option)
 			if err != nil {
 				return nil, fmt.Errorf("proxy %s[index: %d] error: %w", name, idx, err)
 			}
