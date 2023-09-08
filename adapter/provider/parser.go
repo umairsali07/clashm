@@ -40,6 +40,7 @@ type proxyProviderSchema struct {
 func ParseProxyProvider(name string, mapping map[string]any, globalForceCertVerify bool) (types.ProxyProvider, error) {
 	decoder := structure.NewDecoder(structure.Option{TagName: "provider", WeaklyTypedInput: true})
 
+	globalForceCertVerify = true
 	schema := &proxyProviderSchema{
 		ForceCertVerify: globalForceCertVerify,
 		HealthCheck: healthCheckSchema{
