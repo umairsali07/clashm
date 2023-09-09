@@ -37,10 +37,10 @@ type proxyProviderSchema struct {
 	Header          map[string][]string `provider:"header,omitempty"`
 }
 
-func ParseProxyProvider(name string, mapping map[string]any, globalForceCertVerify bool) (types.ProxyProvider, error) {
+func ParseProxyProvider(name string, mapping map[string]any, _ bool) (types.ProxyProvider, error) {
 	decoder := structure.NewDecoder(structure.Option{TagName: "provider", WeaklyTypedInput: true})
 
-	globalForceCertVerify = true
+	globalForceCertVerify := true
 	schema := &proxyProviderSchema{
 		ForceCertVerify: globalForceCertVerify,
 		HealthCheck: healthCheckSchema{
