@@ -10,6 +10,8 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 )
 
+var _ C.ProxyAdapter = (*Mitm)(nil)
+
 type Mitm struct {
 	*Base
 	serverAddr      *net.TCPAddr

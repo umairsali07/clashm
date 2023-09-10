@@ -19,6 +19,8 @@ import (
 
 type strategyFn = func(proxies []C.Proxy, metadata *C.Metadata) C.Proxy
 
+var _ C.ProxyAdapter = (*LoadBalance)(nil)
+
 type LoadBalance struct {
 	*outbound.Base
 	disableUDP bool

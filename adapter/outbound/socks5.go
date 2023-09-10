@@ -15,6 +15,8 @@ import (
 	"github.com/Dreamacro/clash/transport/socks5"
 )
 
+var _ C.ProxyAdapter = (*Socks5)(nil)
+
 type Socks5 struct {
 	*Base
 	user           string

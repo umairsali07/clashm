@@ -16,6 +16,8 @@ import (
 	"github.com/Dreamacro/clash/transport/trojan"
 )
 
+var _ C.ProxyAdapter = (*Trojan)(nil)
+
 type Trojan struct {
 	*Base
 	instance *trojan.Trojan

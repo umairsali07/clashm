@@ -20,6 +20,8 @@ func urlTestWithTolerance(tolerance uint16) urlTestOption {
 	}
 }
 
+var _ C.ProxyAdapter = (*URLTest)(nil)
+
 type URLTest struct {
 	*outbound.Base
 	tolerance  uint16

@@ -17,6 +17,8 @@ import (
 	"github.com/Dreamacro/clash/tunnel"
 )
 
+var _ C.ProxyAdapter = (*Relay)(nil)
+
 type Relay struct {
 	*outbound.Base
 	disableDNS bool

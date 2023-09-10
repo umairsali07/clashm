@@ -17,6 +17,8 @@ import (
 	"github.com/Dreamacro/clash/transport/ssr/protocol"
 )
 
+var _ C.ProxyAdapter = (*ShadowSocksR)(nil)
+
 type ShadowSocksR struct {
 	*Base
 	cipher   core.Cipher

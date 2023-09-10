@@ -77,8 +77,6 @@ type Conn interface {
 type PacketConn interface {
 	net.PacketConn
 	Connection
-	// Deprecate WriteWithMetadata because of remote resolve DNS cause TURN failed
-	// WriteWithMetadata(p []byte, metadata *Metadata) (n int, err error)
 }
 
 type ProxyAdapter interface {
@@ -129,12 +127,6 @@ type Proxy interface {
 	DelayHistory() []DelayHistory
 	LastDelay() uint16
 	URLTest(ctx context.Context, url string) (uint16, uint16, error)
-
-	// Deprecated: use DialContext instead.
-	Dial(metadata *Metadata) (Conn, error)
-
-	// Deprecated: use DialPacketConn instead.
-	DialUDP(metadata *Metadata) (PacketConn, error)
 }
 
 // AdapterType is enum of adapter type

@@ -13,6 +13,8 @@ import (
 	"github.com/Dreamacro/clash/transport/snell"
 )
 
+var _ C.ProxyAdapter = (*Snell)(nil)
+
 type Snell struct {
 	*Base
 	psk        []byte

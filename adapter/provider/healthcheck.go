@@ -27,6 +27,10 @@ type HealthCheck struct {
 }
 
 func (hc *HealthCheck) process() {
+	defer func() {
+		_ = recover()
+	}()
+
 	if hc.ticker != nil {
 		return
 	}

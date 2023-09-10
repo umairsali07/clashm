@@ -17,6 +17,8 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 )
 
+var _ C.ProxyAdapter = (*Http)(nil)
+
 type Http struct {
 	*Base
 	user      string

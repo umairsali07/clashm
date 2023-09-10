@@ -30,6 +30,8 @@ const (
 	maxLength = 1024 << 4
 )
 
+var _ C.ProxyAdapter = (*Vless)(nil)
+
 type Vless struct {
 	*Base
 	client *vless.Client

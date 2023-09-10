@@ -11,6 +11,8 @@ import (
 	"github.com/Dreamacro/clash/constant/provider"
 )
 
+var _ C.ProxyAdapter = (*Fallback)(nil)
+
 type Fallback struct {
 	*outbound.Base
 	disableUDP bool

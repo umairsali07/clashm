@@ -34,6 +34,8 @@ var controlFns []func(network, address string, c syscall.RawConn) error
 
 const dialTimeout = 10 * time.Second
 
+var _ C.ProxyAdapter = (*WireGuard)(nil)
+
 type WireGuard struct {
 	*Base
 	wgDevice  *device.Device

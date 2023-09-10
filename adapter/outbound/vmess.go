@@ -21,6 +21,8 @@ import (
 	"github.com/Dreamacro/clash/transport/vmess"
 )
 
+var _ C.ProxyAdapter = (*Vmess)(nil)
+
 type Vmess struct {
 	*Base
 	client *vmess.Client

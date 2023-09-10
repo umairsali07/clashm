@@ -9,6 +9,8 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 )
 
+var _ C.ProxyAdapter = (*Direct)(nil)
+
 type Direct struct {
 	*Base
 }

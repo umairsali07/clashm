@@ -16,6 +16,8 @@ import (
 	v2rayObfs "github.com/Dreamacro/clash/transport/v2ray-plugin"
 )
 
+var _ C.ProxyAdapter = (*ShadowSocks)(nil)
+
 type ShadowSocks struct {
 	*Base
 	cipher core.Cipher
