@@ -23,7 +23,7 @@
 - Local HTTP/HTTPS/SOCKS server with authentication support
 - Shadowsocks(R), VMess, VLESS, Trojan, Snell, WireGuard, SOCKS5, HTTP(S) outbound support
 - Built-in [fake-ip](https://www.rfc-editor.org/rfc/rfc3089) DNS server that aims to minimize DNS pollution attack impact. DoH/DoT upstream supported.
-- Rules based off domains, GEOIP, GEOSITE, IP-CIDR or process names to route packets to different destinations
+- Rules based off dynamic scripting, domains, GEOIP, GEOSITE, IP-CIDR or process names to route packets to different destinations
 - Proxy groups allow users to implement powerful rules. Supports automatic fallback, load balancing or auto select proxy based off latency
 - Remote providers, allowing users to get proxy lists remotely instead of hardcoding in config
 - Transparent proxy: Redirect TCP and TProxy TCP/UDP with automatic route table/rule management
@@ -32,14 +32,14 @@
 - Policy routing with Scripts
 
 ## Getting Started
-Documentations are available at [GitHub Wiki](https://github.com/Dreamacro/clash/wiki).
+Documentations are available at [GitHub Wiki](https://dreamacro.github.io/clash/).
 
 ## Advanced usage for this branch
 ### General configuration
 ```yaml
-sniffing: true # Sniff TLS SNI
+# sniffing: true # Sniff TLS SNI
 
-force-cert-verify: true # force verify TLS Certificate, prevent machine-in-the-middle attacks
+force-cert-verify: true # force verify TLS Certificate for all proxies, prevent Machine-In-The-Middle attack
 
 profile:
   tracing: false # prevent logs leak, default value is true
@@ -62,7 +62,7 @@ WARNING: DO NOT USE THIS FEATURE TO BREAK LOCAL LAWS
 # Port of MITM proxy server on the local end
 mitm-port: 7894
 
-# Man-In-The-Middle attack
+# Machine-In-The-Middle attack
 mitm:
   hosts: # use for others proxy type. E.g: TUN, socks
     - +.example.com
@@ -81,7 +81,7 @@ mitm:
 ```
 
 ### DNS configuration
-Support resolve ip with a proxy tunnel or interface.
+Support lookup ip with a proxy tunnel or interface.
 
 Support `geosite` with `fallback-filter`.
 
@@ -103,14 +103,14 @@ Use `curl -X POST controllerip:port/cache/fakeip/flush` to flush persistence fak
      - tls://223.5.5.5:853
    fallback:
      - 'tls://8.8.4.4:853#proxy or interface'
-     - 'https://1.0.0.1/dns-query#Proxy'  # append the proxy adapter name to the end of DNS URL with '#' prefix.
+     - 'https://1.0.0.1/dns-query#Proxy' # use a proxy or interface
    remote-nameserver: # remote resolve DNS
      - 'tls://1.1.1.1:853'
      - 'tls://8.8.8.8:853'
    fallback-filter:
      geoip: false
      geosite:
-       - gfw  # `geosite` filter only use fallback server to resolve ip, prevent DNS leaks to untrusted DNS providers.
+       - gfw  # `geosite` filter only use fallback server to lookup ip, prevent DNS leaks to untrusted DNS providers.
      domain:
        - +.example.com
      ipcidr:
@@ -127,7 +127,6 @@ Simply add the following to the main configuration:
 tun:
   enable: true
   stack: system # or gvisor
-  # device: tun://utun8 # or fd://xxx, it's optional
   # dns-hijack:
   #   - 8.8.8.8:53
   #   - tcp://8.8.8.8:53
@@ -176,9 +175,6 @@ Finally, open the Clash
 - Support rule `GEOSITE`.
 - Support rule `USER-AGENT`.
 - Support `multiport` condition for rule `SRC-PORT` and `DST-PORT`.
-- Support `network` condition for all rules.
-- Support `process` condition for all rules.
-- Support source IPCIDR condition for all rules, just append to the end.
 - Support nestable "rule groups", `if` field is the same as the shortcut syntax and if none of the sub-rules match, then continue to match the next rule.
 
 Script shortcuts engines: [expr](https://expr.medv.io/) & [starlark](https://github.com/google/starlark-go).
@@ -214,18 +210,11 @@ rules:
   - SCRIPT,BilibiliUdp,REJECT
   - SCRIPT,ParentalControls,REJECT
 
-  # network condition for all rules
-  - DOMAIN-SUFFIX,example.com,DIRECT,tcp
-  - DOMAIN-SUFFIX,example.com,REJECT,udp
-
-  # process condition for all rules (add 'P:' prefix)
-  - DOMAIN-SUFFIX,example.com,REJECT,P:Google Chrome Helper
-
   # multiport condition for rules SRC-PORT and DST-PORT
   - DST-PORT,123/136/137-139,DIRECT,udp
 
   # USER-AGENT payload cannot include the comma character, '*' meaning any character.
-  - USER-AGENT,*example*,PROXY
+  # - USER-AGENT,*example*,PROXY
 
   # rule GEOSITE
   - GEOSITE,category-ads-all,REJECT
@@ -238,9 +227,6 @@ rules:
   - GEOSITE,geolocation-cn,DIRECT
   - GEOSITE,geolocation-!cn,PROXY
 
-  # source IPCIDR condition for all rules in gateway proxy
-  #- GEOSITE,geolocation-!cn,REJECT,192.168.1.88/32,192.168.1.99/32
-  
   - GEOIP,telegram,PROXY,no-resolve
   - GEOIP,lan,DIRECT,no-resolve
   - GEOIP,cn,DIRECT
@@ -297,7 +283,7 @@ script:
       if processName == 'apsd':
         return "DIRECT"
 
-      if metadata["network"] == 'udp' and metadata["dst_port"] == 443:
+      if metadata["network"] == 'udp' and metadata["dst_port"] == '443':
         return "REJECT"
 
       host = metadata["host"]
@@ -365,8 +351,6 @@ interface Context {
 ### Proxies configuration
 Support outbound protocol `VLESS`.
 
-Support `Trojan` with XTLS.
-
 Support userspace `WireGuard` outbound.
 
 Support relay `UDP` traffic.
@@ -386,31 +370,7 @@ proxies:
     servername: example.com
     udp: true
     # skip-cert-verify: true
-  - name: "vless-xtls"
-    type: vless
-    server: server
-    port: 443
-    uuid: uuid
-    network: tcp
-    servername: example.com
-    flow: xtls-rprx-direct # or xtls-rprx-origin
-    # flow-show: true # print the XTLS direction log
-    # udp: true
-    # skip-cert-verify: true
 
-  # Trojan
-  - name: "trojan-xtls"
-    type: trojan
-    server: server
-    port: 443
-    password: yourpsk
-    network: tcp
-    flow: xtls-rprx-direct # or xtls-rprx-origin
-    # flow-show: true # print the XTLS direction log
-    # udp: true
-    # sni: example.com # aka server name
-    # skip-cert-verify: true
-  
   # WireGuard
   - name: "wg"
     type: wireguard
@@ -448,8 +408,8 @@ proxy-groups:
   - name: "filtering-proxy-providers"
     type: url-test
     url: "http://www.gstatic.com/generate_204"
-    interval: 300
-    tolerance: 200
+    interval: 5m # support human-friendly config (30s 1h 10m30s etc.)
+    tolerance: 200ms # support human-friendly config (30s 1h 10m30s etc.)
     # lazy: true
     # disable-dns: true # disable remote resolve DNS for this group
     filter: "XXX" # a regular expression
@@ -459,22 +419,26 @@ proxy-groups:
 proxy-providers:
   provider1:
     type: http
-    url: "url" # support V2Ray subscription URL
-    # url-proxy: true # forward to tun if tun enabled
-    interval: 3600
+    url: "url"
+    interval: 24h # support human-friendly config (30s 1h 10m30s etc.)
     path: ./providers/provider1.yaml
-    # filter: "xxx"
-    # prefix-name: "XXX-"
-    header:  # custom http request header
-      User-Agent:
-        - "Clash/v1.10.6"
-    #   Accept:
-    #     - 'application/vnd.github.v3.raw'
-    #   Authorization:
-    #     - ' token xxxxxxxxxxx'
+    # prefix-name: "XXX-" # append a prefix name to each proxy name to avoid duplicate names with other proxies
+    # url-proxy: true # proxy the URL by inbounds or TUN
+    # rand-host: true # use a random host for http/ws network, it will overwrite the `host` field in http-opts and ws-opts
+    # disable-dns: true # disable remote resolve DNS
+    # udp: true # force enable UDP traffic, it will overwrite the `udp` field, conflict with `disable-udp` field
+    # disable-udp: true # disable UDP traffic, it will overwrite the `udp` field
+    force-cert-verify: true # force verify TLS Certificate, default value is true, if the value is true then overwrite the `skip-cert-verify` value to false
+    # header:  # custom http request header
+      # User-Agent:
+      #   - "Clash/v1.18.0"
+      # Accept:
+      #   - 'application/vnd.github.v3.raw'
+      # Authorization:
+      #   - ' token xxxxxxxxxxx'
     health-check:
       enable: false
-      interval: 1200
+      interval: 0
       # lazy: false # default value is true
       url: http://www.gstatic.com/generate_204
 ```
@@ -561,9 +525,6 @@ external-ui: dashboard
 ```
 Open [http://127.0.0.1:9090/ui/](http://127.0.0.1:9090/ui/) by web browser.
 
-## Development
-If you want to build an application that uses clash as a library, check out the the [GitHub Wiki](https://github.com/Dreamacro/clash/wiki/use-clash-as-a-library)
-
 ## Credits
 
 * [riobard/go-shadowsocks2](https://github.com/riobard/go-shadowsocks2)
@@ -573,5 +534,3 @@ If you want to build an application that uses clash as a library, check out the 
 ## License
 
 This software is released under the GPL-3.0 license.
-
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FDreamacro%2Fclash.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2FDreamacro%2Fclash?ref=badge_large)
