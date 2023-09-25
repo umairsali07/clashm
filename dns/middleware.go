@@ -91,7 +91,7 @@ func withMapping(mapping *cache.LruCache[netip.Addr, string]) middleware {
 
 				switch a := ans.(type) {
 				case *D.A:
-					ip, _ = netip.AddrFromSlice(a.A)
+					ip, _ = netip.AddrFromSlice(a.A.To4())
 					ttl = a.Hdr.Ttl
 					if !ip.IsGlobalUnicast() {
 						continue

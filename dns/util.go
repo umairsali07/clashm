@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"time"
 
@@ -45,6 +46,8 @@ func putMsgToCacheWithExpire(c *cache.LruCache[string, *rMsg], key string, msg *
 			sec = max(sec, 300) // at least 5 minutes to cache
 		}
 	}
+
+	sortAnswer(msg.Msg.Answer)
 
 	c.SetWithExpire(key, msg.Copy(), time.Now().Add(time.Duration(sec)*time.Second))
 }
@@ -97,6 +100,35 @@ func minTTL(records []D.RR) uint32 {
 	return 0
 }
 
+func sortAnswer(answer []D.RR) {
+	slices.SortFunc(answer, func(ip1, ip2 D.RR) int {
+		var (
+			addr1, addr2 netip.Addr
+			ok           bool
+		)
+		switch a := ip1.(type) {
+		case *D.A:
+			addr1, ok = netip.AddrFromSlice(a.A.To4())
+		case *D.AAAA:
+			addr1, ok = netip.AddrFromSlice(a.AAAA)
+		}
+		if !ok {
+			addr1 = netip.MustParseAddr("ffff::")
+		}
+		ok = false
+		switch a := ip2.(type) {
+		case *D.A:
+			addr2, ok = netip.AddrFromSlice(a.A.To4())
+		case *D.AAAA:
+			addr2, ok = netip.AddrFromSlice(a.AAAA)
+		}
+		if !ok {
+			addr2 = netip.MustParseAddr("ffff::")
+		}
+		return addr1.Compare(addr2)
+	})
+}
+
 func isIPRequest(q D.Question) bool {
 	return q.Qclass == D.ClassINET && (q.Qtype == D.TypeA || q.Qtype == D.TypeAAAA)
 }
@@ -141,7 +173,7 @@ func msgToIP(msg *D.Msg) []netip.Addr {
 			}
 			ips = append(ips, ip)
 		case *D.A:
-			ip, ok := netip.AddrFromSlice(ans.A)
+			ip, ok := netip.AddrFromSlice(ans.A.To4())
 			if !ok {
 				continue
 			}
@@ -158,14 +190,8 @@ func msgToIPStr(msg *D.Msg) []string {
 	for _, answer := range msg.Answer {
 		switch ans := answer.(type) {
 		case *D.AAAA:
-			if ans.AAAA == nil {
-				continue
-			}
 			ips = append(ips, ans.AAAA.String())
 		case *D.A:
-			if ans.A == nil {
-				continue
-			}
 			ips = append(ips, ans.A.String())
 		}
 	}
