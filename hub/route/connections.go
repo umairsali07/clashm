@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/render"
 	"github.com/gorilla/websocket"
 
-	"github.com/Dreamacro/clash/common/pool"
-	"github.com/Dreamacro/clash/tunnel/statistic"
+	"github.com/umairsali07/clashm/common/pool"
+	"github.com/umairsali07/clashm/tunnel/statistic"
 )
 
 func connectionRouter() http.Handler {

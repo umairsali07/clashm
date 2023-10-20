@@ -8,7 +8,7 @@ import (
 
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/component/dialer"
+	"github.com/umairsali07/clashm/component/dialer"
 )
 
 // Adapter Type

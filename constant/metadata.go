@@ -9,7 +9,7 @@ import (
 
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/transport/socks5"
+	"github.com/umairsali07/clashm/transport/socks5"
 )
 
 var MetadataTypeMapping = map[string]Type{

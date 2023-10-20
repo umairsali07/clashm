@@ -3,9 +3,9 @@ package http
 import (
 	"net"
 
-	"github.com/Dreamacro/clash/common/cache"
-	"github.com/Dreamacro/clash/component/auth"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/common/cache"
+	"github.com/umairsali07/clashm/component/auth"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 type Listener struct {

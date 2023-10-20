@@ -5,8 +5,8 @@ import (
 
 	"golang.zx2c4.com/wireguard/tun"
 
-	"github.com/Dreamacro/clash/listener/tun/device"
-	"github.com/Dreamacro/clash/listener/tun/device/iobased"
+	"github.com/umairsali07/clashm/listener/tun/device"
+	"github.com/umairsali07/clashm/listener/tun/device/iobased"
 )
 
 type TUN struct {

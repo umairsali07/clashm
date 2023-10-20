@@ -10,9 +10,9 @@ import (
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
-	"github.com/Dreamacro/clash/common/nnip"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/listener/tun/device"
+	"github.com/umairsali07/clashm/common/nnip"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/listener/tun/device"
 )
 
 var (

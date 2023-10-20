@@ -14,7 +14,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/link/channel"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
-	dev "github.com/Dreamacro/clash/listener/tun/device"
+	dev "github.com/umairsali07/clashm/listener/tun/device"
 )
 
 const (

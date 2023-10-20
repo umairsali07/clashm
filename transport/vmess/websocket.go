@@ -17,7 +17,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/Dreamacro/clash/common/errors2"
+	"github.com/umairsali07/clashm/common/errors2"
 )
 
 type websocketConn struct {

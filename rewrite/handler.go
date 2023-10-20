@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/tunnel"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 var _ C.RewriteHandler = (*RewriteHandler)(nil)

@@ -3,7 +3,7 @@ package geodata
 import (
 	"strings"
 
-	"github.com/Dreamacro/clash/component/geodata/router"
+	"github.com/umairsali07/clashm/component/geodata/router"
 )
 
 func loadGeoSiteMatcher(countryCode string, not bool) (*router.DomainMatcher, int, error) {

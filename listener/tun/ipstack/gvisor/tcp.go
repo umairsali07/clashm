@@ -12,9 +12,9 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 	"gvisor.dev/gvisor/pkg/waiter"
 
-	"github.com/Dreamacro/clash/common/pool"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/gvisor/adapter"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/gvisor/option"
+	"github.com/umairsali07/clashm/common/pool"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/gvisor/adapter"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/gvisor/option"
 )
 
 const (

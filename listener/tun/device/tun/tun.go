@@ -2,7 +2,7 @@
 package tun
 
 import (
-	"github.com/Dreamacro/clash/listener/tun/device"
+	"github.com/umairsali07/clashm/listener/tun/device"
 )
 
 const Driver = "tun"

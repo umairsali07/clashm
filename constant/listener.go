@@ -11,7 +11,7 @@ import (
 
 	"github.com/samber/lo"
 
-	"github.com/Dreamacro/clash/component/auth"
+	"github.com/umairsali07/clashm/component/auth"
 )
 
 type Listener interface {

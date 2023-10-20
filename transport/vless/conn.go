@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofrs/uuid/v5"
 
-	"github.com/Dreamacro/clash/common/pool"
+	"github.com/umairsali07/clashm/common/pool"
 )
 
 type Conn struct {

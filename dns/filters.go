@@ -4,9 +4,9 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/Dreamacro/clash/component/geodata/router"
-	"github.com/Dreamacro/clash/component/mmdb"
-	"github.com/Dreamacro/clash/component/trie"
+	"github.com/umairsali07/clashm/component/geodata/router"
+	"github.com/umairsali07/clashm/component/mmdb"
+	"github.com/umairsali07/clashm/component/trie"
 )
 
 type fallbackIPFilter interface {

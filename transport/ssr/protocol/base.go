@@ -13,8 +13,8 @@ import (
 
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/common/pool"
-	"github.com/Dreamacro/clash/transport/shadowsocks/core"
+	"github.com/umairsali07/clashm/common/pool"
+	"github.com/umairsali07/clashm/transport/shadowsocks/core"
 )
 
 type Base struct {

@@ -6,10 +6,10 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/Dreamacro/clash/adapter/inbound"
-	N "github.com/Dreamacro/clash/common/net"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/socks5"
+	"github.com/umairsali07/clashm/adapter/inbound"
+	N "github.com/umairsali07/clashm/common/net"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/transport/socks5"
 )
 
 func getServerConn(serverConn *N.BufferedConn, request *http.Request, srcAddr net.Addr, originTarget net.Addr, in chan<- C.ConnContext) (*N.BufferedConn, error) {

@@ -6,7 +6,7 @@ import (
 	"github.com/oschwald/geoip2-golang"
 	"github.com/phuslu/log"
 
-	C "github.com/Dreamacro/clash/constant"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 var (

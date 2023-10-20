@@ -7,8 +7,8 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/atomic"
 
-	"github.com/Dreamacro/clash/common/batch"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/common/batch"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 const (

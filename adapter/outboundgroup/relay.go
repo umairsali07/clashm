@@ -7,14 +7,14 @@ import (
 	"net"
 	"time"
 
-	"github.com/Dreamacro/clash/adapter"
-	"github.com/Dreamacro/clash/adapter/outbound"
-	"github.com/Dreamacro/clash/common/singledo"
-	"github.com/Dreamacro/clash/component/dialer"
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/constant/provider"
-	"github.com/Dreamacro/clash/tunnel"
+	"github.com/umairsali07/clashm/adapter"
+	"github.com/umairsali07/clashm/adapter/outbound"
+	"github.com/umairsali07/clashm/common/singledo"
+	"github.com/umairsali07/clashm/component/dialer"
+	"github.com/umairsali07/clashm/component/resolver"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/constant/provider"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 var _ C.ProxyAdapter = (*Relay)(nil)

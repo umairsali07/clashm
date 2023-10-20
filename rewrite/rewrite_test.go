@@ -6,8 +6,8 @@ import (
 	regexp "github.com/dlclark/regexp2"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/tunnel"
+	"github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 func TestRewrite(t *testing.T) {

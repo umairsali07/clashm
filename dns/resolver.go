@@ -16,12 +16,12 @@ import (
 	"go.uber.org/atomic"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/Dreamacro/clash/common/cache"
-	"github.com/Dreamacro/clash/component/fakeip"
-	"github.com/Dreamacro/clash/component/geodata/router"
-	"github.com/Dreamacro/clash/component/resolver"
-	"github.com/Dreamacro/clash/component/trie"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/common/cache"
+	"github.com/umairsali07/clashm/component/fakeip"
+	"github.com/umairsali07/clashm/component/geodata/router"
+	"github.com/umairsali07/clashm/component/resolver"
+	"github.com/umairsali07/clashm/component/trie"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 type dnsClient interface {

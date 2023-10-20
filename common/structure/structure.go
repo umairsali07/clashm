@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Dreamacro/clash/common/errors2"
+	"github.com/umairsali07/clashm/common/errors2"
 )
 
 var durationType = reflect.TypeOf(time.Duration(0))

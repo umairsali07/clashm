@@ -13,8 +13,8 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/Dreamacro/clash/component/dialer"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/component/dialer"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 var _ C.ProxyAdapter = (*Http)(nil)

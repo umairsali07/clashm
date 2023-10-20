@@ -4,13 +4,13 @@ import (
 	"io"
 	"net"
 
-	"github.com/Dreamacro/clash/adapter/inbound"
-	N "github.com/Dreamacro/clash/common/net"
-	"github.com/Dreamacro/clash/component/auth"
-	C "github.com/Dreamacro/clash/constant"
-	authStore "github.com/Dreamacro/clash/listener/auth"
-	"github.com/Dreamacro/clash/transport/socks4"
-	"github.com/Dreamacro/clash/transport/socks5"
+	"github.com/umairsali07/clashm/adapter/inbound"
+	N "github.com/umairsali07/clashm/common/net"
+	"github.com/umairsali07/clashm/component/auth"
+	C "github.com/umairsali07/clashm/constant"
+	authStore "github.com/umairsali07/clashm/listener/auth"
+	"github.com/umairsali07/clashm/transport/socks4"
+	"github.com/umairsali07/clashm/transport/socks5"
 )
 
 type Listener struct {

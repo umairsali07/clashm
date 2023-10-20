@@ -10,9 +10,9 @@ import (
 	"net/netip"
 	"strconv"
 
-	"github.com/Dreamacro/clash/component/dialer"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/socks5"
+	"github.com/umairsali07/clashm/component/dialer"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/transport/socks5"
 )
 
 var _ C.ProxyAdapter = (*Socks5)(nil)

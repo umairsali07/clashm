@@ -9,7 +9,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/Dreamacro/clash/common/byteorder"
+	"github.com/umairsali07/clashm/common/byteorder"
 )
 
 type Buffer struct {

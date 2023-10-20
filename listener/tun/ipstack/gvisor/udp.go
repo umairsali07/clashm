@@ -11,8 +11,8 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 
-	"github.com/Dreamacro/clash/listener/tun/ipstack/gvisor/adapter"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/gvisor/option"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/gvisor/adapter"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/gvisor/option"
 )
 
 type packet struct {

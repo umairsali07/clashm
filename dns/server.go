@@ -7,8 +7,8 @@ import (
 	D "github.com/miekg/dns"
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/common/sockopt"
-	"github.com/Dreamacro/clash/context"
+	"github.com/umairsali07/clashm/common/sockopt"
+	"github.com/umairsali07/clashm/context"
 )
 
 var (

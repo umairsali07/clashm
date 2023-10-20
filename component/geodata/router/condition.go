@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Dreamacro/clash/component/geodata/strmatcher"
+	"github.com/umairsali07/clashm/component/geodata/strmatcher"
 )
 
 var matcherTypeMap = map[Domain_Type]strmatcher.Type{

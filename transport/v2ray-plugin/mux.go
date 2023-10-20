@@ -7,7 +7,7 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/Dreamacro/clash/common/pool"
+	"github.com/umairsali07/clashm/common/pool"
 )
 
 type SessionStatus = byte

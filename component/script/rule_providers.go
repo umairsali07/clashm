@@ -7,7 +7,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
-	C "github.com/Dreamacro/clash/constant"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 var (

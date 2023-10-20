@@ -10,11 +10,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
-	"github.com/Dreamacro/clash/adapter"
-	"github.com/Dreamacro/clash/adapter/outboundgroup"
-	"github.com/Dreamacro/clash/component/profile/cachefile"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/tunnel"
+	"github.com/umairsali07/clashm/adapter"
+	"github.com/umairsali07/clashm/adapter/outboundgroup"
+	"github.com/umairsali07/clashm/component/profile/cachefile"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 func proxyRouter() http.Handler {

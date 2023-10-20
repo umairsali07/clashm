@@ -2,8 +2,8 @@ NAME=clash-plus-pro
 BINDIR=bin
 VERSION=$(shell git describe --tags --always || echo "unknown version")
 BUILDTIME=$(shell date -u)
-GOBUILD=CGO_ENABLED=0 go build -trimpath -ldflags '-X "github.com/Dreamacro/clash/constant.Version=$(VERSION)" \
-		-X "github.com/Dreamacro/clash/constant.BuildTime=$(BUILDTIME)" \
+GOBUILD=CGO_ENABLED=0 go build -trimpath -ldflags '-X "github.com/umairsali07/clashm/constant.Version=$(VERSION)" \
+		-X "github.com/umairsali07/clashm/constant.BuildTime=$(BUILDTIME)" \
 		-w -s -buildid='
 
 PLATFORM_LIST = \

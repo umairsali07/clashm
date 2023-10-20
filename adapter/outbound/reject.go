@@ -6,9 +6,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/Dreamacro/clash/common/cache"
-	"github.com/Dreamacro/clash/component/dialer"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/common/cache"
+	"github.com/umairsali07/clashm/component/dialer"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 const (

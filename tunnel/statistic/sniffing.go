@@ -7,9 +7,9 @@ import (
 	"github.com/phuslu/log"
 	"go.uber.org/atomic"
 
-	"github.com/Dreamacro/clash/common/snifer/tls"
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/common/snifer/tls"
+	"github.com/umairsali07/clashm/component/resolver"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 type sniffing struct {

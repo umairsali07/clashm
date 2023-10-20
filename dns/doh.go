@@ -15,7 +15,7 @@ import (
 
 	D "github.com/miekg/dns"
 
-	"github.com/Dreamacro/clash/component/resolver"
+	"github.com/umairsali07/clashm/component/resolver"
 )
 
 const (

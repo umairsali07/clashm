@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/listener"
-	"github.com/Dreamacro/clash/tunnel"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/listener"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 func TestClash_Listener(t *testing.T) {

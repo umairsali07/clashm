@@ -4,10 +4,10 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/Dreamacro/clash/adapter/inbound"
-	"github.com/Dreamacro/clash/common/pool"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/socks5"
+	"github.com/umairsali07/clashm/adapter/inbound"
+	"github.com/umairsali07/clashm/common/pool"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/transport/socks5"
 )
 
 type UDPListener struct {

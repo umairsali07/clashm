@@ -12,13 +12,13 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 
-	"github.com/Dreamacro/clash/adapter/inbound"
-	"github.com/Dreamacro/clash/common/nnip"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/listener/tun/device"
-	"github.com/Dreamacro/clash/listener/tun/ipstack"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/commons"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/gvisor/option"
+	"github.com/umairsali07/clashm/adapter/inbound"
+	"github.com/umairsali07/clashm/common/nnip"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/listener/tun/device"
+	"github.com/umairsali07/clashm/listener/tun/ipstack"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/commons"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/gvisor/option"
 )
 
 type gvStack struct {

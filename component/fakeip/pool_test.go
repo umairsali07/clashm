@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.etcd.io/bbolt"
 
-	"github.com/Dreamacro/clash/component/profile/cachefile"
-	"github.com/Dreamacro/clash/component/trie"
+	"github.com/umairsali07/clashm/component/profile/cachefile"
+	"github.com/umairsali07/clashm/component/trie"
 )
 
 func createPools(options Options) ([]*Pool, string, error) {

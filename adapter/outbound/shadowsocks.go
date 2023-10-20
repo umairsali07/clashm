@@ -7,13 +7,13 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/Dreamacro/clash/common/structure"
-	"github.com/Dreamacro/clash/component/dialer"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/shadowsocks/core"
-	obfs "github.com/Dreamacro/clash/transport/simple-obfs"
-	"github.com/Dreamacro/clash/transport/socks5"
-	v2rayObfs "github.com/Dreamacro/clash/transport/v2ray-plugin"
+	"github.com/umairsali07/clashm/common/structure"
+	"github.com/umairsali07/clashm/component/dialer"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/transport/shadowsocks/core"
+	obfs "github.com/umairsali07/clashm/transport/simple-obfs"
+	"github.com/umairsali07/clashm/transport/socks5"
+	v2rayObfs "github.com/umairsali07/clashm/transport/v2ray-plugin"
 )
 
 var _ C.ProxyAdapter = (*ShadowSocks)(nil)

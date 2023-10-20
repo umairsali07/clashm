@@ -12,8 +12,8 @@ import (
 
 	D "github.com/miekg/dns"
 
-	"github.com/Dreamacro/clash/component/dialer"
-	"github.com/Dreamacro/clash/component/resolver"
+	"github.com/umairsali07/clashm/component/dialer"
+	"github.com/umairsali07/clashm/component/resolver"
 )
 
 var _ dnsClient = (*client)(nil)

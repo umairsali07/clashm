@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Dreamacro/clash/adapter/outbound"
-	"github.com/Dreamacro/clash/common/structure"
-	"github.com/Dreamacro/clash/common/util"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/adapter/outbound"
+	"github.com/umairsali07/clashm/common/structure"
+	"github.com/umairsali07/clashm/common/util"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 type ProxyOption struct {

@@ -13,11 +13,11 @@ import (
 	"github.com/phuslu/log"
 	"go.uber.org/automaxprocs/maxprocs"
 
-	"github.com/Dreamacro/clash/config"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/hub"
-	"github.com/Dreamacro/clash/hub/executor"
-	cLog "github.com/Dreamacro/clash/log"
+	"github.com/umairsali07/clashm/config"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/hub"
+	"github.com/umairsali07/clashm/hub/executor"
+	cLog "github.com/umairsali07/clashm/log"
 )
 
 var (

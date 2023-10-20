@@ -11,13 +11,13 @@ import (
 	"github.com/phuslu/log"
 	"github.com/samber/lo"
 
-	"github.com/Dreamacro/clash/component/resolver"
-	"github.com/Dreamacro/clash/config"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/hub/executor"
-	"github.com/Dreamacro/clash/listener"
-	L "github.com/Dreamacro/clash/log"
-	"github.com/Dreamacro/clash/tunnel"
+	"github.com/umairsali07/clashm/component/resolver"
+	"github.com/umairsali07/clashm/config"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/hub/executor"
+	"github.com/umairsali07/clashm/listener"
+	L "github.com/umairsali07/clashm/log"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 func configRouter() http.Handler {

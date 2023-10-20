@@ -9,9 +9,9 @@ import (
 
 	D "github.com/miekg/dns"
 
-	"github.com/Dreamacro/clash/component/dhcp"
-	"github.com/Dreamacro/clash/component/iface"
-	"github.com/Dreamacro/clash/component/resolver"
+	"github.com/umairsali07/clashm/component/dhcp"
+	"github.com/umairsali07/clashm/component/iface"
+	"github.com/umairsali07/clashm/component/resolver"
 )
 
 const (

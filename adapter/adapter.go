@@ -16,10 +16,10 @@ import (
 
 	"go.uber.org/atomic"
 
-	"github.com/Dreamacro/clash/common/queue"
-	"github.com/Dreamacro/clash/component/dialer"
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/common/queue"
+	"github.com/umairsali07/clashm/component/dialer"
+	"github.com/umairsali07/clashm/component/resolver"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 type Proxy struct {

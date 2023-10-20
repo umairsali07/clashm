@@ -8,7 +8,7 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/atomic"
 
-	C "github.com/Dreamacro/clash/constant"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 type tracker interface {

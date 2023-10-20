@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Dreamacro/clash/common/convert"
-	"github.com/Dreamacro/clash/common/pool"
+	"github.com/umairsali07/clashm/common/convert"
+	"github.com/umairsali07/clashm/common/pool"
 )
 
 func init() {

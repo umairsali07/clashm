@@ -15,16 +15,16 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/atomic"
 
-	A "github.com/Dreamacro/clash/adapter"
-	"github.com/Dreamacro/clash/adapter/inbound"
-	"github.com/Dreamacro/clash/component/nat"
-	P "github.com/Dreamacro/clash/component/process"
-	"github.com/Dreamacro/clash/component/resolver"
-	"github.com/Dreamacro/clash/component/trie"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/constant/provider"
-	icontext "github.com/Dreamacro/clash/context"
-	"github.com/Dreamacro/clash/tunnel/statistic"
+	A "github.com/umairsali07/clashm/adapter"
+	"github.com/umairsali07/clashm/adapter/inbound"
+	"github.com/umairsali07/clashm/component/nat"
+	P "github.com/umairsali07/clashm/component/process"
+	"github.com/umairsali07/clashm/component/resolver"
+	"github.com/umairsali07/clashm/component/trie"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/constant/provider"
+	icontext "github.com/umairsali07/clashm/context"
+	"github.com/umairsali07/clashm/tunnel/statistic"
 )
 
 var (

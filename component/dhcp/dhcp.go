@@ -8,8 +8,8 @@ import (
 
 	"github.com/insomniacslk/dhcp/dhcpv4"
 
-	"github.com/Dreamacro/clash/common/nnip"
-	"github.com/Dreamacro/clash/component/iface"
+	"github.com/umairsali07/clashm/common/nnip"
+	"github.com/umairsali07/clashm/component/iface"
 )
 
 var (

@@ -15,11 +15,11 @@ import (
 	"github.com/phuslu/log"
 	"go.uber.org/atomic"
 
-	"github.com/Dreamacro/clash/common/observable"
-	"github.com/Dreamacro/clash/common/pool"
-	C "github.com/Dreamacro/clash/constant"
-	L "github.com/Dreamacro/clash/log"
-	"github.com/Dreamacro/clash/tunnel/statistic"
+	"github.com/umairsali07/clashm/common/observable"
+	"github.com/umairsali07/clashm/common/pool"
+	C "github.com/umairsali07/clashm/constant"
+	L "github.com/umairsali07/clashm/log"
+	"github.com/umairsali07/clashm/tunnel/statistic"
 )
 
 var (

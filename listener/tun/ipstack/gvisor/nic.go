@@ -6,7 +6,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
-	"github.com/Dreamacro/clash/listener/tun/ipstack/gvisor/option"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/gvisor/option"
 )
 
 const (

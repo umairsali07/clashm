@@ -7,8 +7,8 @@ import (
 
 	"github.com/oschwald/geoip2-golang"
 
-	"github.com/Dreamacro/clash/component/geodata"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/component/geodata"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 func UpdateGeoDatabases() error {

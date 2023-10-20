@@ -14,7 +14,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
 
-	"github.com/Dreamacro/clash/common/cert"
+	"github.com/umairsali07/clashm/common/cert"
 )
 
 var (

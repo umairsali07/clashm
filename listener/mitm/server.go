@@ -12,14 +12,14 @@ import (
 	"github.com/phuslu/log"
 	"go.uber.org/atomic"
 
-	"github.com/Dreamacro/clash/adapter/outbound"
-	"github.com/Dreamacro/clash/common/cache"
-	"github.com/Dreamacro/clash/common/cert"
-	"github.com/Dreamacro/clash/component/auth"
-	C "github.com/Dreamacro/clash/constant"
-	authStore "github.com/Dreamacro/clash/listener/auth"
-	rewrites "github.com/Dreamacro/clash/rewrite"
-	"github.com/Dreamacro/clash/tunnel"
+	"github.com/umairsali07/clashm/adapter/outbound"
+	"github.com/umairsali07/clashm/common/cache"
+	"github.com/umairsali07/clashm/common/cert"
+	"github.com/umairsali07/clashm/component/auth"
+	C "github.com/umairsali07/clashm/constant"
+	authStore "github.com/umairsali07/clashm/listener/auth"
+	rewrites "github.com/umairsali07/clashm/rewrite"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 var proxyDone = atomic.NewUint32(0)

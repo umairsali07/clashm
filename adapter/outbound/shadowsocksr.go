@@ -7,14 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Dreamacro/clash/common/convert"
-	"github.com/Dreamacro/clash/component/dialer"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/shadowsocks/core"
-	"github.com/Dreamacro/clash/transport/shadowsocks/shadowaead"
-	"github.com/Dreamacro/clash/transport/shadowsocks/shadowstream"
-	"github.com/Dreamacro/clash/transport/ssr/obfs"
-	"github.com/Dreamacro/clash/transport/ssr/protocol"
+	"github.com/umairsali07/clashm/common/convert"
+	"github.com/umairsali07/clashm/component/dialer"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/transport/shadowsocks/core"
+	"github.com/umairsali07/clashm/transport/shadowsocks/shadowaead"
+	"github.com/umairsali07/clashm/transport/shadowsocks/shadowstream"
+	"github.com/umairsali07/clashm/transport/ssr/obfs"
+	"github.com/umairsali07/clashm/transport/ssr/protocol"
 )
 
 var _ C.ProxyAdapter = (*ShadowSocksR)(nil)
@@ -114,7 +114,7 @@ func (ssr *ShadowSocksR) ListenPacketContext(ctx context.Context, metadata *C.Me
 
 func NewShadowSocksR(option ShadowSocksROption) (*ShadowSocksR, error) {
 	// SSR protocol compatibility
-	// https://github.com/Dreamacro/clash/pull/2056
+	// https://github.com/umairsali07/clashm/pull/2056
 	if strings.EqualFold(option.Cipher, "none") {
 		option.Cipher = "dummy"
 	}

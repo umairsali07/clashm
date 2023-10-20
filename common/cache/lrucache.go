@@ -8,7 +8,7 @@ import (
 
 	"github.com/samber/lo"
 
-	"github.com/Dreamacro/clash/common/generics/list"
+	"github.com/umairsali07/clashm/common/generics/list"
 )
 
 // Option is part of Functional Options Pattern

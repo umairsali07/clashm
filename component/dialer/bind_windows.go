@@ -8,8 +8,8 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"github.com/Dreamacro/clash/common/byteorder"
-	"github.com/Dreamacro/clash/component/iface"
+	"github.com/umairsali07/clashm/common/byteorder"
+	"github.com/umairsali07/clashm/component/iface"
 )
 
 const (

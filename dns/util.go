@@ -14,13 +14,13 @@ import (
 	"github.com/phuslu/log"
 	"github.com/samber/lo"
 
-	"github.com/Dreamacro/clash/common/cache"
-	"github.com/Dreamacro/clash/common/errors2"
-	"github.com/Dreamacro/clash/common/picker"
-	"github.com/Dreamacro/clash/component/dialer"
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/tunnel"
+	"github.com/umairsali07/clashm/common/cache"
+	"github.com/umairsali07/clashm/common/errors2"
+	"github.com/umairsali07/clashm/common/picker"
+	"github.com/umairsali07/clashm/component/dialer"
+	"github.com/umairsali07/clashm/component/resolver"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 const (

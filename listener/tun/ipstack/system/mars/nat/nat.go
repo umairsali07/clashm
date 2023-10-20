@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
-	dev "github.com/Dreamacro/clash/listener/tun/device"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/system/mars/tcpip"
+	dev "github.com/umairsali07/clashm/listener/tun/device"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/system/mars/tcpip"
 )
 
 func Start(device dev.Device, gateway, portal, _ netip.Addr) (*TCP, *UDP, error) {

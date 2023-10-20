@@ -10,10 +10,10 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/Dreamacro/clash/component/dialer"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/gun"
-	"github.com/Dreamacro/clash/transport/trojan"
+	"github.com/umairsali07/clashm/component/dialer"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/transport/gun"
+	"github.com/umairsali07/clashm/transport/trojan"
 )
 
 var _ C.ProxyAdapter = (*Trojan)(nil)

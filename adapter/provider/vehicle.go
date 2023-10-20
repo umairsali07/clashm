@@ -11,11 +11,11 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/Dreamacro/clash/common/convert"
-	"github.com/Dreamacro/clash/component/dialer"
-	"github.com/Dreamacro/clash/constant"
-	types "github.com/Dreamacro/clash/constant/provider"
-	"github.com/Dreamacro/clash/listener/auth"
+	"github.com/umairsali07/clashm/common/convert"
+	"github.com/umairsali07/clashm/component/dialer"
+	"github.com/umairsali07/clashm/constant"
+	types "github.com/umairsali07/clashm/constant/provider"
+	"github.com/umairsali07/clashm/listener/auth"
 )
 
 var _ types.Vehicle = (*FileVehicle)(nil)

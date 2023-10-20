@@ -5,7 +5,7 @@ import (
 	"net/netip"
 	"strings"
 
-	C "github.com/Dreamacro/clash/constant"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 var (

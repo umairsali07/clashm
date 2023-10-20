@@ -10,7 +10,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 
-	"github.com/Dreamacro/clash/common/pool"
+	"github.com/umairsali07/clashm/common/pool"
 )
 
 const (

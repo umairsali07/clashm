@@ -10,7 +10,7 @@ import (
 	logger "github.com/phuslu/log"
 	gLog "gvisor.dev/gvisor/pkg/log"
 
-	"github.com/Dreamacro/clash/common/observable"
+	"github.com/umairsali07/clashm/common/observable"
 )
 
 var (

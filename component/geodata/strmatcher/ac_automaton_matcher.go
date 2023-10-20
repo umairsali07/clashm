@@ -1,7 +1,7 @@
 package strmatcher
 
 import (
-	"github.com/Dreamacro/clash/common/generics/list"
+	"github.com/umairsali07/clashm/common/generics/list"
 )
 
 const validCharCount = 53

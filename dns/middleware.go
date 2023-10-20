@@ -8,11 +8,11 @@ import (
 	D "github.com/miekg/dns"
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/common/cache"
-	"github.com/Dreamacro/clash/component/fakeip"
-	"github.com/Dreamacro/clash/component/trie"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/context"
+	"github.com/umairsali07/clashm/common/cache"
+	"github.com/umairsali07/clashm/component/fakeip"
+	"github.com/umairsali07/clashm/component/trie"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/context"
 )
 
 type (

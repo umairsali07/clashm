@@ -6,9 +6,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/listener"
-	"github.com/Dreamacro/clash/tunnel"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/listener"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 func inboundRouter() http.Handler {

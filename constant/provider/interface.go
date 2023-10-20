@@ -3,8 +3,8 @@ package provider
 import (
 	"net"
 
-	"github.com/Dreamacro/clash/component/resolver"
-	"github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/component/resolver"
+	"github.com/umairsali07/clashm/constant"
 )
 
 // Vehicle Type

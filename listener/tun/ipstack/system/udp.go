@@ -6,7 +6,7 @@ import (
 
 	"gvisor.dev/gvisor/pkg/buffer"
 
-	"github.com/Dreamacro/clash/listener/tun/ipstack/system/mars/nat"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/system/mars/nat"
 )
 
 type packet struct {

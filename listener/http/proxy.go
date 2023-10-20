@@ -8,12 +8,12 @@ import (
 
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/adapter/inbound"
-	"github.com/Dreamacro/clash/common/cache"
-	N "github.com/Dreamacro/clash/common/net"
-	"github.com/Dreamacro/clash/component/auth"
-	C "github.com/Dreamacro/clash/constant"
-	authStore "github.com/Dreamacro/clash/listener/auth"
+	"github.com/umairsali07/clashm/adapter/inbound"
+	"github.com/umairsali07/clashm/common/cache"
+	N "github.com/umairsali07/clashm/common/net"
+	"github.com/umairsali07/clashm/component/auth"
+	C "github.com/umairsali07/clashm/constant"
+	authStore "github.com/umairsali07/clashm/listener/auth"
 )
 
 func HandleConn(c net.Conn, in chan<- C.ConnContext, cache *cache.LruCache[string, bool], auth auth.Authenticator) {

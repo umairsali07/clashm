@@ -8,10 +8,10 @@ import (
 	"github.com/go-chi/render"
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/config"
-	"github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/hub/executor"
-	L "github.com/Dreamacro/clash/log"
+	"github.com/umairsali07/clashm/config"
+	"github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/hub/executor"
+	L "github.com/umairsali07/clashm/log"
 )
 
 var (

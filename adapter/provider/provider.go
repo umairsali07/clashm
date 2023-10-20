@@ -16,15 +16,15 @@ import (
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
 
-	"github.com/Dreamacro/clash/adapter"
-	"github.com/Dreamacro/clash/adapter/outbound"
-	"github.com/Dreamacro/clash/common/convert"
-	"github.com/Dreamacro/clash/common/singledo"
-	"github.com/Dreamacro/clash/common/structure"
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
-	types "github.com/Dreamacro/clash/constant/provider"
-	"github.com/Dreamacro/clash/tunnel/statistic"
+	"github.com/umairsali07/clashm/adapter"
+	"github.com/umairsali07/clashm/adapter/outbound"
+	"github.com/umairsali07/clashm/common/convert"
+	"github.com/umairsali07/clashm/common/singledo"
+	"github.com/umairsali07/clashm/common/structure"
+	"github.com/umairsali07/clashm/component/resolver"
+	C "github.com/umairsali07/clashm/constant"
+	types "github.com/umairsali07/clashm/constant/provider"
+	"github.com/umairsali07/clashm/tunnel/statistic"
 )
 
 var (

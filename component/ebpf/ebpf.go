@@ -3,10 +3,10 @@ package ebpf
 import (
 	"net/netip"
 
-	"github.com/Dreamacro/clash/common/cmd"
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/socks5"
+	"github.com/umairsali07/clashm/common/cmd"
+	"github.com/umairsali07/clashm/component/resolver"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/transport/socks5"
 )
 
 type option struct {

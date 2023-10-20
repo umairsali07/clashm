@@ -6,8 +6,8 @@ import (
 
 	D "github.com/miekg/dns"
 
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/component/resolver"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 const ipv6Delay = time.Millisecond * 6 // delay response AAAA answer when disable IPv6

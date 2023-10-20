@@ -8,9 +8,9 @@ import (
 
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/common/convert"
-	"github.com/Dreamacro/clash/component/mmdb"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/common/convert"
+	"github.com/umairsali07/clashm/component/mmdb"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 func downloadMMDB(path string) (err error) {

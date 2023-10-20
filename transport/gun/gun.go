@@ -20,7 +20,7 @@ import (
 	"go.uber.org/atomic"
 	"golang.org/x/net/http2"
 
-	"github.com/Dreamacro/clash/common/pool"
+	"github.com/umairsali07/clashm/common/pool"
 )
 
 var (

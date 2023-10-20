@@ -9,8 +9,8 @@ import (
 
 	"gvisor.dev/gvisor/pkg/buffer"
 
-	dev "github.com/Dreamacro/clash/listener/tun/device"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/system/mars/tcpip"
+	dev "github.com/umairsali07/clashm/listener/tun/device"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/system/mars/tcpip"
 )
 
 type udpElement struct {

@@ -17,7 +17,7 @@ import (
 
 	"golang.org/x/crypto/chacha20poly1305"
 
-	"github.com/Dreamacro/clash/common/pool"
+	"github.com/umairsali07/clashm/common/pool"
 )
 
 // Conn wrapper a net.Conn with vmess protocol

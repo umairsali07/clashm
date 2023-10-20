@@ -9,8 +9,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/Dreamacro/clash/common/convert"
-	"github.com/Dreamacro/clash/common/pool"
+	"github.com/umairsali07/clashm/common/convert"
+	"github.com/umairsali07/clashm/common/pool"
 )
 
 // HTTPObfs is shadowsocks http simple-obfs implementation

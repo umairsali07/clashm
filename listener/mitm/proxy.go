@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Dreamacro/clash/common/cache"
-	N "github.com/Dreamacro/clash/common/net"
-	"github.com/Dreamacro/clash/component/auth"
-	C "github.com/Dreamacro/clash/constant"
-	H "github.com/Dreamacro/clash/listener/http"
+	"github.com/umairsali07/clashm/common/cache"
+	N "github.com/umairsali07/clashm/common/net"
+	"github.com/umairsali07/clashm/component/auth"
+	C "github.com/umairsali07/clashm/constant"
+	H "github.com/umairsali07/clashm/listener/http"
 )
 
 func HandleConn(c net.Conn, opt *C.MitmOption, in chan<- C.ConnContext, cache *cache.LruCache[string, bool], auth auth.Authenticator) {

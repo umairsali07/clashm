@@ -11,10 +11,10 @@ import (
 	"golang.zx2c4.com/wireguard/windows/services"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
-	"github.com/Dreamacro/clash/common/nnip"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/listener/tun/device"
-	"github.com/Dreamacro/clash/listener/tun/device/tun"
+	"github.com/umairsali07/clashm/common/nnip"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/listener/tun/device"
+	"github.com/umairsali07/clashm/listener/tun/device/tun"
 )
 
 var (

@@ -3,8 +3,8 @@ package rules
 import (
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/component/ipset"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/component/ipset"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 type IPSet struct {

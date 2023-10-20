@@ -7,7 +7,7 @@ import (
 	"github.com/antonmedv/expr/vm"
 	"github.com/antonmedv/expr/vm/runtime"
 
-	C "github.com/Dreamacro/clash/constant"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 var inStringPatch = &stringInString{}

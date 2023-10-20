@@ -7,11 +7,11 @@ import (
 
 	regexp "github.com/dlclark/regexp2"
 
-	"github.com/Dreamacro/clash/adapter/outbound"
-	"github.com/Dreamacro/clash/adapter/provider"
-	"github.com/Dreamacro/clash/common/structure"
-	C "github.com/Dreamacro/clash/constant"
-	types "github.com/Dreamacro/clash/constant/provider"
+	"github.com/umairsali07/clashm/adapter/outbound"
+	"github.com/umairsali07/clashm/adapter/provider"
+	"github.com/umairsali07/clashm/common/structure"
+	C "github.com/umairsali07/clashm/constant"
+	types "github.com/umairsali07/clashm/constant/provider"
 )
 
 var (

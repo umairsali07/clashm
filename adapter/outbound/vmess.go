@@ -12,13 +12,13 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/Dreamacro/clash/common/convert"
-	"github.com/Dreamacro/clash/component/dialer"
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/transport/gun"
-	"github.com/Dreamacro/clash/transport/socks5"
-	"github.com/Dreamacro/clash/transport/vmess"
+	"github.com/umairsali07/clashm/common/convert"
+	"github.com/umairsali07/clashm/component/dialer"
+	"github.com/umairsali07/clashm/component/resolver"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/transport/gun"
+	"github.com/umairsali07/clashm/transport/socks5"
+	"github.com/umairsali07/clashm/transport/vmess"
 )
 
 var _ C.ProxyAdapter = (*Vmess)(nil)

@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
-	"github.com/Dreamacro/clash/tunnel"
+	"github.com/umairsali07/clashm/tunnel"
 )
 
 func ruleRouter() http.Handler {

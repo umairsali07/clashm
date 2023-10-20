@@ -3,7 +3,7 @@ package rules
 import (
 	"net/netip"
 
-	C "github.com/Dreamacro/clash/constant"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 type IPCIDROption func(*IPCIDR)

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Dreamacro/clash/common/nnip"
-	"github.com/Dreamacro/clash/component/profile/cachefile"
-	"github.com/Dreamacro/clash/component/trie"
+	"github.com/umairsali07/clashm/common/nnip"
+	"github.com/umairsali07/clashm/component/profile/cachefile"
+	"github.com/umairsali07/clashm/component/trie"
 )
 
 const (

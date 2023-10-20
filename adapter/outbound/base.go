@@ -9,8 +9,8 @@ import (
 
 	"github.com/phuslu/log"
 
-	"github.com/Dreamacro/clash/component/dialer"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/component/dialer"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 type Base struct {

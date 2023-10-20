@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"sync"
 
-	"github.com/Dreamacro/clash/component/trie"
+	"github.com/umairsali07/clashm/component/trie"
 )
 
 // DomainTrieCertsStorage cache wildcard certificates

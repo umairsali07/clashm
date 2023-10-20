@@ -3,7 +3,7 @@ module clash-test
 go 1.21
 
 require (
-	github.com/Dreamacro/clash v0.0.0
+	github.com/umairsali07/clashm v0.0.0
 	github.com/docker/docker v24.0.5+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/miekg/dns v1.1.55
@@ -12,7 +12,7 @@ require (
 	golang.org/x/net v0.15.0
 )
 
-replace github.com/Dreamacro/clash => ../
+replace github.com/umairsali07/clashm => ../
 
 require (
 	github.com/Microsoft/go-winio v0.6.1 // indirect

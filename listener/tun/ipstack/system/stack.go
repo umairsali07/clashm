@@ -11,15 +11,15 @@ import (
 	"github.com/phuslu/log"
 	"gvisor.dev/gvisor/pkg/buffer"
 
-	"github.com/Dreamacro/clash/adapter/inbound"
-	"github.com/Dreamacro/clash/common/nnip"
-	"github.com/Dreamacro/clash/common/pool"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/listener/tun/device"
-	"github.com/Dreamacro/clash/listener/tun/ipstack"
-	D "github.com/Dreamacro/clash/listener/tun/ipstack/commons"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/system/mars"
-	"github.com/Dreamacro/clash/listener/tun/ipstack/system/mars/nat"
+	"github.com/umairsali07/clashm/adapter/inbound"
+	"github.com/umairsali07/clashm/common/nnip"
+	"github.com/umairsali07/clashm/common/pool"
+	C "github.com/umairsali07/clashm/constant"
+	"github.com/umairsali07/clashm/listener/tun/device"
+	"github.com/umairsali07/clashm/listener/tun/ipstack"
+	D "github.com/umairsali07/clashm/listener/tun/ipstack/commons"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/system/mars"
+	"github.com/umairsali07/clashm/listener/tun/ipstack/system/mars/nat"
 )
 
 type sysStack struct {

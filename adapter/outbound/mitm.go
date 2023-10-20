@@ -5,9 +5,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/Dreamacro/clash/component/auth"
-	"github.com/Dreamacro/clash/component/dialer"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/component/auth"
+	"github.com/umairsali07/clashm/component/dialer"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 var _ C.ProxyAdapter = (*Mitm)(nil)

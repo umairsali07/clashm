@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Dreamacro/clash/component/ipset"
-	"github.com/Dreamacro/clash/component/mmdb"
-	P "github.com/Dreamacro/clash/component/process"
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/umairsali07/clashm/component/ipset"
+	"github.com/umairsali07/clashm/component/mmdb"
+	P "github.com/umairsali07/clashm/component/process"
+	"github.com/umairsali07/clashm/component/resolver"
+	C "github.com/umairsali07/clashm/constant"
 )
 
 func uResolveIP(mtd *C.Metadata, host string) string {
